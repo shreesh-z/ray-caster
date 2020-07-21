@@ -1,7 +1,26 @@
+#need to import os and sys for native code compilation
+#ignore when running with py interpreter
+import os
+import sys
 import numpy as np
 import pygame as pg
 import pygame.freetype
 import math
+import imageio
+
+
+def resource_path(relative_path):
+    """
+    This function is used only for compiling to native code using pyinstaller.
+    Ignore if running with the python interpreter.
+    """
+    try:
+    # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class FastMath:
     """Class for fast evaluation of trig functions.
@@ -146,53 +165,99 @@ class Player:
 class GameMap:
     """A game map class that represents the grid map.
     Attributes:
-        (vBlockCnt, hBlockCnt) : Map dimensions by number of blocks   (mapDims)
-        (blockW, blockH)       : Block dimensions in pixels           (blockDims)
-        (mapL, mapU)           : Position of the 2D map on the screen (mapPos)
-        wallColorDict          : Dictionary for colors of walls
-    
-    Derived Attributes:
-        mapArr    : numpy array of the map layout.
-        mapHLines : numpy array of the horizontal walls
-        mapVLines : numpy array of the vertical walls
+        mapDims       : Map dimensions by number of blocks
+        blockDims     : Block dimensions in pixels
+        mapPos        : Position of the 2D map on the screen
+        wallColorDict : Dictionary for colors of walls
+        mapArr        : numpy array of the map layout.
+        mapHLines     : numpy array of the horizontal walls
+        mapVLines     : numpy array of the vertical walls
+        
         The mapping scheme used by the dictionary is:
             0    for no block
             non0 for a (colored) block
         
     """
-    def __init__(self, vBlockCnt, hBlockCnt, blockW, blockH, mapL, mapU, wallColorDict):
-        self.mapDims = (vBlockCnt, hBlockCnt)   #how many blocks per direction
-        self.blockDims = (blockW, blockH)       #dimension of blocks by pixel
-        self.mapPos = (mapL, mapU)              #position of map on screen by pixel
+    def __init__(self, mapImageName, blockW, blockH, mapL, mapU):
+        """
+        Parameters:
+            mapImageName : name of the image file of the map
+            blockW       : block width
+            blockH       : block height
+            mapL         : map's top-left corner's x position
+            mapU         : map's top-left corner's y position
+        """
         
-        self.mapArr = np.zeros(self.mapDims, 'int8')    #stores the map layout
-        #-----customizing-of-the-map-----
-        self.mapArr[0,:] = 1
-        self.mapArr[-1,:] = 2
-        self.mapArr[:,0] = 1
-        self.mapArr[:,-1] = 3
-        self.mapArr[1:7,1:7] = np.array([[0, 0, 1, 0, 0, 0],
-                                           [0, 0, 1, 0, 0, 0],
-                                           [0, 0, 0, 0, 2, 2],
-                                           [0, 3, 0, 0, 0, 0],
-                                           [0, 3, 0, 0, 0, 0],
-                                           [0, 0, 0, 1, 0, 0]])
-        self.mapArr[7:13,1:7] = self.mapArr[1:7,1:7] 
-        self.mapArr[1:7,7:13] = np.roll(self.mapArr[1:7,1:7], 1, axis = 1)
-        self.mapArr[7:13,7:13] = np.roll(np.transpose(self.mapArr[1:7,1:7]), 2, axis=0)
+        #reading the image into memory as a numpy array
+        #the image HAS to be a 24-bit bit map file (.bmp)
+        mapImage = imageio.imread(mapImageName)
         
-        #dont try this, you won't be able to move
-        #self.mapArr[1:-1,1:-1] = np.random.randint(0,4,(self.mapDims[0]-2,self.mapDims[1]-2))
-        #-----customizing-of-the-map-----
+        #setting tuple definitions
+        self.blockDims = (blockW, blockH)       #dimension of blocks is by pixel
+        self.mapPos = (mapL, mapU) 
+        self.mapDims = mapImage.shape[0:2]
         
-        self.mapHLines = np.zeros((vBlockCnt+1, hBlockCnt), 'int8') #stores horiz walls
-        self.mapVLines = np.zeros((vBlockCnt, hBlockCnt+1), 'int8') #stores vert walls
+        #this is the color of blank blocks on the map
+        #when wall distance exceeds draw distance, this
+        #light gray color will be drawn
+        blankColor = (200,200,200)
+        
+        #this list holds all the colors encountered in the map.
+        #Nothing encountered yet, so only filled with blank color
+        colorList = [blankColor]
+        
+        #the wall color dictionary that holds
+        #index-color_tuple key-value pairs
+        #initial pair is for empty blocks
+        self.wallColorDict = {0:blankColor}
+        
+        #the inverse of the wall color dict that holds
+        #color_tuple-index key-value pairs
+        indexDict = {blankColor:0}
+        
+        #next color to be added will have an index 1
+        colorInd = 1
+        
+        #map array holding the indices of each block
+        #zero index by default
+        self.mapArr = np.zeros(self.mapDims, 'int8')
+        
+        #building the map array by reading the image
+        for i in np.arange(mapImage.shape[0]):
+            for j in np.arange(mapImage.shape[1]):
+                if (mapImage[i,j,:] != 255).any(): #if pixel isn't white
+                    
+                    #the color tuple at the given pixel
+                    pixelColor = tuple(mapImage[i,j,:])
+                    
+                    #if this color has not been encountered before
+                    if pixelColor not in colorList:
+                        
+                        #adding newly encountered color into color list
+                        colorList.append(pixelColor)
+                        
+                        #adding key-value pairs into corresp. dictionaries
+                        self.wallColorDict[colorInd] = pixelColor
+                        indexDict[pixelColor] = colorInd
+                        
+                        #setting map block to said index
+                        self.mapArr[i,j] = colorInd
+                        colorInd += 1                                              
+                    else:
+                        #if color already encountered, update the index at
+                        #the given block
+                        self.mapArr[i,j] = indexDict.get(pixelColor)
+        
+        #building the wall arrays using the map array
+        self.mapHLines = np.zeros((self.mapDims[0]+1, self.mapDims[1]), 'int8') #stores horiz walls
+        self.mapVLines = np.zeros((self.mapDims[0], self.mapDims[1]+1), 'int8') #stores vert walls
+        
         for i in np.arange(self.mapArr.shape[0]):
             for j in np.arange(self.mapArr.shape[1]):
                 if self.mapArr[i,j] != 0:
                     self.mapHLines[i:i+2,j] = self.mapArr[i,j]
                     self.mapVLines[i,j:j+2] = self.mapArr[i,j]
-        self.wallColorDict = wallColorDict
+    
     
     def getMapSurf(self, backColor):
         """Returns a pygame.Surface object with the game map drawn on it.
@@ -214,9 +279,8 @@ class GameMap:
             screen          : the screen pygame.Surface object
             player          : the Player object present on the map
             spread          : the angular spread of the field of view (in degrees)
-            step            : discrete steps of angles in the field of view at which rays are cast (in degrees)
             depth           : depth of field in number of blocks
-            scale           : amount of scaling done on the final 3D screen
+            wallHeight      : height of the blocks in pixels
             wallColorRatio  : ratio of brightness of vert walls over horiz walls, to achieve some lighting effects
             drawrays        : whether to draw the rays on the 2D map
         
@@ -277,19 +341,9 @@ class GameMap:
             #since this value is used a lot
             tanAng = fastMath.tan(rAng)
             
-            #if ray angles are perfectly vertical or horizontal, NaN errors can occur
+            #if ray angles are perfectly vertical or horizontal, NaN errors can occur.
             #Hence if such angles are encountered, the ray is not casted
             checkRay = True
-            
-            #The distance travelled by the ray when it hits a wall
-            #finalDist = 0
-            
-            #The indices in mapHLines or mapVLines of the wall at which the ray hit
-            #hitIndX, hitIndY = 0, 0
-            
-            #The indices in mapHLines (hmapX and hmapY) and mapVLines (vmapX and vmapY)
-            #Used by the traveling ray to check if the vertical or horiz. wall it hit has a block
-            #vmapX, vmapY, hmapX, hmapY = 0,0,0,0
             
             #first, checking for horizontal wall collisions            
             if rAng > math.pi:                 #looking down
@@ -379,7 +433,10 @@ class GameMap:
                     #only draw the ray line if the 2D map has to be drawn
                     pg.draw.aaline(screen,(255,0,0),(x,y),(int(hRayX),int(hRayY)))
                 
+                #The distance travelled by the ray when it hits a wall
                 finalDist = hDist
+                
+                #The indices of the wall at which the ray hit
                 hitIndX, hitIndY = hmapX, hmapY
                 
                 #from the wall color dictionary, get the corresponding wall color
@@ -402,6 +459,8 @@ class GameMap:
             
             #drawing the 3D scene
             try:
+                #scaling the wall slice acc. to the actual height 
+                #and the projection on the screen
                 rayHig = (wallHeight * screenDist)/finalDist
             except ZeroDivisionError:
                 continue
@@ -410,8 +469,8 @@ class GameMap:
             rayHig = rayHig if rayHig < h else h
             
             #the rectangle that will be drawn by one ray 
-            #round(numpy.float64) converts to numpy.float64
-            #int(numpy.float64) converts to int
+            #note: round(numpy.float64) converts to numpy.float64
+            #      int(numpy.float64) converts to int
             rayRect = pg.Rect(0,0,int(round(rayWid)),int(round(rayHig)))
             
             #centering the rect
@@ -461,15 +520,8 @@ def main():
     #initializing the player
     player = Player(85,85,math.radians(360-45),20)
     
-    #setting the wall color dictionary for the map
-    wallColors = {
-        0: (255,255,255),
-        1: (255,120,0),
-        2: (0,200,255),
-        3: (0,0,250)
-    }
-    #initializing the map
-    gMap = GameMap(14,14,50,50,0,0,wallColors)
+    #initializing the map with the map image
+    gMap = GameMap('./levelTrial.bmp', 50, 50, 0, 0)
     
     screen = getScreen(scDims, True)
     #to run the game loop
@@ -562,7 +614,7 @@ def main():
                 player.draw(screen)
             
             #cast rays
-            gMap.castRays(screen, player, 30, 14, 50, 0.8, drawMap)
+            gMap.castRays(screen, player, 30, 20, 50, 0.8, drawMap)
             
             #refresh the display
             pg.display.flip()
