@@ -8,6 +8,12 @@ import pygame.freetype
 import math
 import imageio
 
+"""GLOBAL VARIABLES"""
+BLOCK_WIDTH = 50
+BLOCK_LENGTH = 50 #height is handled differently
+BLOCK_HEIGHT = 50
+BLANK_COLOR = (20,20,20)
+
 
 def resource_path(relative_path):
     """
@@ -84,15 +90,28 @@ class Player:
         self.playerDim = playerDim
         self.playRect = pg.Rect(x - playerDim//2, y - playerDim//2, playerDim, playerDim)
         
-    def draw(self, screen):
+    def draw(self, screen, mapRect, gMap):
         """Draws on the passed screen surface the player's square,
         and a line showing the direction in which they are looking"""
-        pg.draw.rect(screen,(255,255,0),self.playRect)
-        pg.draw.aaline(screen, (255,0,0), (self.x, self.y), (int(self.x + self.playerDim*fastMath.cos(self.ang)), int(self.y - self.playerDim*fastMath.sin(self.ang))))
+        scaleX = mapRect.width/(gMap.blockDims[0]*gMap.mapDims[1])
+        scaleY = mapRect.height/(gMap.blockDims[1]*gMap.mapDims[0])
+        playerDim = gMap.blockDims[0]
+        pg.draw.rect(screen,(250,255,0),
+                    ( int(mapRect.left + (self.x - playerDim//2)*scaleX), 
+                    int(mapRect.top + (self.y - playerDim//2)*scaleY), 
+                    int(playerDim*scaleX), int(playerDim*scaleY) )
+                    )
+        playerDim*=2            
+        pg.draw.aaline(screen, (255,0,0),
+                    ( (mapRect.left + self.x*scaleX, 
+                    mapRect.top + self.y*scaleY) ), 
+                    ( int(mapRect.left + (self.x + playerDim*fastMath.cos(self.ang))*scaleX), 
+                    int(mapRect.top + (self.y - playerDim*fastMath.sin(self.ang))*scaleY) )
+                    )
         
-    
     def move(self, speed, angVel, keys, dt, bounds):
-        """For player movement. Parameters accepted:
+        """
+        For player movement. Parameters accepted:
         speed  : walking speed of the player
         angVel : turning speed of the player
         keys   : string list of pressed keys
@@ -103,16 +122,16 @@ class Player:
         a, s keys for turning left and right respectively
         space for halving the speed of walking and turning
         
-        Returns the net movement vector as a tuple
+        Returns the net movement vector as a list
         """
         
         #to hold pre-movement x, y positions
         x_, y_ = self.x, self.y
         
-        #slow down motion if space is pressed
+        #double the motion speed if space is pressed
         if 'space' in keys:
-            speed /= 2
-            angVel /= 2
+            speed *= 2
+            angVel *= 2
         
         for key in keys:
             #Angle is modulo 2*pi
@@ -138,30 +157,57 @@ class Player:
                 elif key == 'space':
                     continue
                 else:
-                    return 0
+                    return [0,0]
                 
                 #motion is constrained to screen dimensions
                 self.x = (self.x + dx)%bounds[0]; self.y = (self.y + dy)%bounds[1]
                 
-        self.playRect.move_ip(int(round(self.x - x_)), int(round(self.y - y_)))
-        return (self.x - x_, self.y - y_)
+        #self.playRect.move_ip(int(round(self.x - x_)), int(round(self.y - y_)))
+        return [self.x - x_, self.y - y_]
     
-    def collision(self, gMap, motion):
-        """Detects collisions with walls and corrects them.
-        Parameters:
-            gMap   : GameMap object
-            motion : the displacement vector tuple
+    def tryMove(self, gMap):
         """
-        #get map array indices from x, y position
-        left = int(self.x/gMap.blockDims[0])
-        up = int(self.y/gMap.blockDims[1])
+        Function is called only after an entity/player has moved.
+        Checks if current position is valid, ie it doesn't intersect
+        with walls or other entities in the gMap map.
+        """
+        #the bounds of the entity rectangle
+        xl = int((self.x - self.playerDim)/gMap.blockDims[0])
+        xh = int((self.x + self.playerDim)/gMap.blockDims[0])
+        yl = int((self.y - self.playerDim)/gMap.blockDims[1])
+        yh = int((self.y + self.playerDim)/gMap.blockDims[1])
         
-        #if player has moved into a block, reverse the motion
-        if gMap.mapArr[up, left] != 0:
-            self.x -= motion[0]
-            self.y -= motion[1]
+        #checking if a wall is inside the rectangle
+        for i in range(yl,yh+1):
+            for j in range(xl,xh+1):
+                if gMap.mapArr[i,j] != 0:
+                    return False
+        return True
         
-
+    def checkCollision(self, gMap, motion):
+        """
+            Checks for collisions with other entities in the map.
+            If collision is found, the motion is clipped in orthog
+            directions and clipped until the motion is valid.
+        """
+        #check if full motion valid
+        if self.tryMove(gMap):
+            return
+        
+        #else check if only vertical motion valid
+        self.x -= motion[0]
+        if self.tryMove(gMap):
+            return
+        
+        #else check if only horizontal motion valid
+        self.y -= motion[1]
+        self.x += motion[0]
+        if self.tryMove(gMap):
+            return
+        
+        #else this is a fully invalid move, roll back motion
+        self.x -= motion[0]
+    
 class GameMap:
     """A game map class that represents the grid map.
     Attributes:
@@ -199,8 +245,8 @@ class GameMap:
         
         #this is the color of blank blocks on the map
         #when wall distance exceeds draw distance, this
-        #light gray color will be drawn
-        blankColor = (200,200,200)
+        #dark gray color will be drawn
+        blankColor = BLANK_COLOR
         
         #this list holds all the colors encountered in the map.
         #Nothing encountered yet, so only filled with blank color
@@ -225,7 +271,7 @@ class GameMap:
         #building the map array by reading the image
         for i in np.arange(mapImage.shape[0]):
             for j in np.arange(mapImage.shape[1]):
-                if (mapImage[i,j,:] != 255).any(): #if pixel isn't white
+                if (mapImage[i,j,:] != 0).any(): #if pixel isn't black
                     
                     #the color tuple at the given pixel
                     pixelColor = tuple(mapImage[i,j,:])
@@ -268,12 +314,12 @@ class GameMap:
         for i in np.arange(self.mapDims[0]):
             for j in np.arange(self.mapDims[1]):
                 col = self.wallColorDict.get(self.mapArr[i,j])
-                pg.draw.rect(surf, col, (self.blockDims[0]*j, self.blockDims[1]*i, self.blockDims[0]-1, self.blockDims[1]-1))
+                pg.draw.rect(surf, col, (self.blockDims[0]*j, self.blockDims[1]*i, self.blockDims[0], self.blockDims[1]))
                 #blocks are drawn one pixel less than their dimension thick to add borders
         
         return surf
     
-    def castRays(self, screen, player, spread, depth, wallHeight, wallColorRatio, drawrays = False):
+    def castRays(self, screen, player, spread, depth, wallHeight, wallColorRatio):
         """The main part of the rendering process.
         Arguments:
             screen          : the screen pygame.Surface object
@@ -281,27 +327,7 @@ class GameMap:
             spread          : the angular spread of the field of view (in degrees)
             depth           : depth of field in number of blocks
             wallHeight      : height of the blocks in pixels
-            wallColorRatio  : ratio of brightness of vert walls over horiz walls, to achieve some lighting effects
-            drawrays        : whether to draw the rays on the 2D map
-        
-        This ray caster works by casting two rays at a given angle. One which checks for 
-        horizontal wall collisions, and another which checks for vertical wall collisions.
-        
-            While checking horiz walls, first the part ray from the player's (x,y) position to the intersection
-            with the nearest grid line is taken. It is projected along the vertical line, whose end point is hRayY.
-            Using tan(rAng) and hRayY, hRayX is found. (hRayX, hRayY) is the first point of intersection on the grid.
-            To find new points of intersection, only an offset needs to be added to the first point,
-            which is (-blockH*cot(rAng), blockH) (sign flips if player looking up). At each grid line intersection, 
-            wall presence is checked, and rays are cast only up till the depth of field. Once wall presence is found,
-            horiz. wall checking is done and the final distance up to which the ray travelled is stored.
-            
-            Checking vertical walls is similar to checking horiz. walls, but the first ray cast is projected onto the
-            horizontal grid line, whose end point is vRayX. tan(rAng) and vRayX are used to find vRayY. The first point of
-            intersection with the grid lines is (vRayX, vRayY). The offset is (blockW, -blockW*tan(rAng)). Rest of the
-            procedure is the same as before.
-            
-        Once both the wall checks are done, the two distances are compared, and the ray that travelled the lower distance
-        is chosen to render the corresponding wall section. 
+            wallColorRatio  : ratio of brightness of vert walls over horiz walls, to achieve some lighting effects 
         """
         x, y, ang = player.x, player.y, player.ang
         
@@ -323,14 +349,13 @@ class GameMap:
         #The horizontal offset at which the 3D scene is drawn
         #If the map is to be drawn, rays lines are drawn on it and the 3D scene is rendered with an offset
         #No map is not to be drawn, the 3D scene is drawn without any offset
-        screenOffs = self.mapDims[1]*self.blockDims[0] if drawrays else 0
         
         #The width of the rectangle that is rendered by casting one ray
-        rayWid = round((w - screenOffs) / rayCount)
+        rayWid = round(w / rayCount)
         
         #The point on the horizon at which the wall section rendered by a ray is centered
         #Increases as a new ray is to be cast
-        rayCenterx = round(screenOffs + rayWid/2)
+        rayCenterx = round(rayWid/2)
         
         #casting all the rays
         for rayAng in rAngs:
@@ -429,9 +454,6 @@ class GameMap:
             
             if vDist >= hDist:
                 #i.e. the horiz. wall ray has to be considered
-                if drawrays:
-                    #only draw the ray line if the 2D map has to be drawn
-                    pg.draw.aaline(screen,(255,0,0),(x,y),(int(hRayX),int(hRayY)))
                 
                 #The distance travelled by the ray when it hits a wall
                 finalDist = hDist
@@ -442,8 +464,6 @@ class GameMap:
                 #from the wall color dictionary, get the corresponding wall color
                 color = self.wallColorDict.get(self.mapHLines[hitIndY,hitIndX])
             else:
-                if drawrays:
-                    pg.draw.aaline(screen,(255,0,0),(x,y),(int(vRayX),int(vRayY)))
                     
                 finalDist = vDist
                 hitIndX, hitIndY = vmapX, vmapY
@@ -515,26 +535,29 @@ def main():
     #setting FPS
     fps = 30
     
+    #screen resolution
     scDims = (640,400)
     
     #initializing the player
-    player = Player(85,85,math.radians(360-45),20)
+    player = Player(85,85,math.radians(360-45),10)
     
     #initializing the map with the map image
-    gMap = GameMap('./levelTrial.bmp', 50, 50, 0, 0)
+    gMap = GameMap('./levelTrial.bmp', BLOCK_WIDTH, BLOCK_LENGTH, 0, 0)
     
+    #initializing screen surface, True for fullSc
     screen = getScreen(scDims, True)
-    #to run the game loop
-    running = True
     
     #to maintain the frame rate
     clock = pg.time.Clock()
     
-    #the surface on which the 2D map is drawn
+    #the 2D map surface centered at the middle of the screen
     mapSurf = gMap.getMapSurf((50,50,50))
+    mapSurf = pg.transform.scale(mapSurf, (scDims[1],scDims[1]))
+    mapRect = mapSurf.get_rect()
+    mapRect.center = (scDims[0]//2, scDims[1]//2)
     
-    #whether to draw the 2D map on the screen
-    drawMap = False
+    #to draw the 3D scene or 2D map, triggered by tab button
+    draw3D = True
     
     #drawing the intro screen
     gameText = pygame.freetype.SysFont("Courier", 18)
@@ -542,20 +565,34 @@ def main():
     
     textSurf1, textRect1 = gameText.render("A Simple Ray Casting Engine - written by Shreesh", (255,255,255))
     textSurf2, textRect2 = gameText.render("Use direction keys to move; a, s to turn", (255,255,255))
-    textSurf3, textRect3 = gameText.render("Press space to slow down movement", (255,255,255))
+    textSurf3, textRect3 = gameText.render("Press space to double movement speed", (255,255,255))
     textSurf4, textRect4 = gameText.render("Press escape to exit", (255,255,255))
+    textSurf5, textRect5 = gameText.render("Press Enter to continue", (255,255,255))
     
     textRect1.center = (scDims[0]//2, scDims[1]//2 - 60)
     textRect2.center = (scDims[0]//2, scDims[1]//2 - 20)
-    textRect3.center = (scDims[0]//2, scDims[1]//2 + 20)
-    textRect4.center = (scDims[0]//2, scDims[1]//2 + 60)
+    textRect3.center = (scDims[0]//2, scDims[1]//2)
+    textRect4.center = (scDims[0]//2, scDims[1]//2 + 20)
+    textRect5.center = (scDims[0]//2, scDims[1]//2 + 60)
     
     screen.blit(textSurf1, textRect1)
     screen.blit(textSurf2, textRect2)
     screen.blit(textSurf3, textRect3)
     screen.blit(textSurf4, textRect4)
+    screen.blit(textSurf5, textRect5)
     
     pg.display.flip()
+    #intro screen drawn############################
+    
+    #to run the game loop
+    running = False
+    
+    #to show intro screen until enter is pressed
+    while not running:
+        for event in pg.event.get():
+            if event.type == pg.KEYDOWN:
+                if pg.key.name(event.key) == 'return':
+                    running = True
     
     while running:
         #the time since the clock last ticked at the given frequency
@@ -574,11 +611,13 @@ def main():
                 if keyDown == 'escape':
                     running = False
                     break
-                
-                #add any other key press to the buffer,
-                #no duplicate key presses recorded
-                if len(keys) < 4 and keyDown not in keys:
-                    keys.append(keyDown)
+                elif keyDown == 'tab':
+                    draw3D = False
+                else:
+                    #add any other key press to the buffer,
+                    #no duplicate key presses recorded
+                    if len(keys) < 5 and keyDown not in keys:
+                        keys.append(keyDown)
             
             #if a pressed key was released
             elif event.type == pg.KEYUP:
@@ -586,7 +625,9 @@ def main():
                 #keys are removed from the list buffer once released,
                 #provided the buffer is not empty, to prevent underflow
                 keyUp = pg.key.name(event.key)
-                if keys:
+                if keyUp == 'tab':
+                    draw3D = True
+                elif keys:
                     keys.remove(keyUp)
             
             #if the window quit button is pressed
@@ -594,32 +635,33 @@ def main():
                 running = False
                 break
         
-        #display is only refreshed with game logic if a key is pressed
+        #game logic is only refreshed if a key is pressed
         if keys:
+            #movement is tied to framerate
+            motion = player.move(8/fps, 0.05/fps, keys, dt, ((gMap.mapDims[1]-1)*gMap.blockDims[0], (gMap.mapDims[0]-1)*gMap.blockDims[1]))
             
+            #detect wall collisions and correct them
+            player.checkCollision(gMap, motion)
+        
+        #if tab is pressed, draw 3D scene
+        if draw3D:
             #the floor will be a dark gray in color
             screen.fill((50, 50, 50))
             #the "sky" will be white in color
             pg.draw.rect(screen,(255,255,255),(0,0,scDims[0],scDims[1]//2))
             
-            #movement is tied to framerate
-            motion = player.move(8/fps, 0.05/fps, keys, dt, ((gMap.mapDims[1]-1)*gMap.blockDims[0], (gMap.mapDims[0]-1)*gMap.blockDims[1]))
-            
-            #detect wall collisions and correct them
-            player.collision(gMap, motion)
-            
-            if drawMap:
-                #if 2D map is to be drawn
-                screen.blit(mapSurf, gMap.mapPos)
-                player.draw(screen)
-            
+            gMap.castRays(screen, player, 30, 15, BLOCK_HEIGHT, 0.8)
+        else:
+            #if 2D map is to be drawn
+            screen.fill((0, 0, 0))
+            screen.blit(mapSurf, mapRect)
+            player.draw(screen, mapRect, gMap)
             #cast rays
-            gMap.castRays(screen, player, 30, 20, 50, 0.8, drawMap)
             
-            #refresh the display
-            pg.display.flip()
+        #refresh the display
+        pg.display.flip()
             
     pg.quit()
-    
+
 if __name__ == "__main__":
     main()
