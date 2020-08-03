@@ -13,6 +13,7 @@ BLOCK_WIDTH = 50
 BLOCK_LENGTH = 50 #height is handled differently
 BLOCK_HEIGHT = 50
 BLANK_COLOR = (20,20,20)
+DEPTH_OF_FIELD = 15
 
 
 def resource_path(relative_path):
@@ -99,7 +100,7 @@ class Player:
         pg.draw.rect(screen,(250,255,0),
                     ( int(mapRect.left + (self.x - playerDim//2)*scaleX), 
                     int(mapRect.top + (self.y - playerDim//2)*scaleY), 
-                    int(playerDim*scaleX), int(playerDim*scaleY) )
+                    int(playerDim*scaleX), int(playerDim*scaleY) ) 
                     )
         playerDim*=2            
         pg.draw.aaline(screen, (255,0,0),
@@ -650,7 +651,7 @@ def main():
             #the "sky" will be white in color
             pg.draw.rect(screen,(255,255,255),(0,0,scDims[0],scDims[1]//2))
             
-            gMap.castRays(screen, player, 30, 15, BLOCK_HEIGHT, 0.8)
+            gMap.castRays(screen, player, 30, DEPTH_OF_FIELD, BLOCK_HEIGHT, 0.8)
         else:
             #if 2D map is to be drawn
             screen.fill((0, 0, 0))
@@ -662,6 +663,7 @@ def main():
         pg.display.flip()
             
     pg.quit()
+
 
 if __name__ == "__main__":
     main()
