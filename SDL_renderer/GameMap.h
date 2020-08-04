@@ -2,6 +2,8 @@
 #define GAME_MAP
 
 #include <SDL2/SDL.h>
+#include <set>
+#include "MapObject.h"
 
 struct Block{
 	//Holds the color tuple for the wall colors
@@ -25,6 +27,8 @@ class GameMap{
 		
 		//Number of horiz and vertical walls
 		int H_WALL_CNT, V_WALL_CNT;
+		
+		MapObject player;
 	
 	public:
 		//Width of a wall
@@ -33,10 +37,18 @@ class GameMap{
 		//creates the game map by importing a bitmap file
 		//uses SDL's internal mechanisms to read the bitmap file and create the map array
 		GameMap(const char *imgPath);
+		
+		void initPlayer(double x, double y, double ang, double playerDim);
+		
+		void drawPlayer(SDL_Surface *screenSurf);
 		//prints the map to the console
 		void printMap();
 		//draws the map onto the screen surface passed to it
 		void drawMap(SDL_Surface *screenSurf);
+		
+		void movePlayer(std::set<int> keys, double speed, double angVel, double dt);
+		
+		bool tryMove(MapObject player);
 };
 
 #endif

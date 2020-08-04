@@ -1,8 +1,11 @@
 #include <stdio.h>
+#include <cmath>
+#define PI 3.1415926535897932384
 
 //Refer to this header file for documentation
 //since header file already includes SDL, no need to include again
 #include "GameMap.h"
+#include "MapObject.h"
 
 //for a general block
 Block::Block(Uint8 R_, Uint8 G_, Uint8 B_, bool isWall_){
@@ -145,6 +148,111 @@ void GameMap::drawMap(SDL_Surface* mapSurf){
 						);
 		}
 	}
+}
+
+void GameMap::drawPlayer(SDL_Surface *screenSurf){
+	//drawing player square
+	SDL_Rect playRect;
+	playRect.x = player.x-player.objDim/2;
+	playRect.y = player.y-player.objDim/2;
+	playRect.w = player.objDim; playRect.h = player.objDim;
+	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 255, 0 ) );
+	
+	playRect.x = player.x + player.objDim*std::cos(player.ang);
+	playRect.y = player.y - player.objDim*std::sin(player.ang);
+	playRect.w = 5; playRect.h = 5;
+	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
+}
+
+void GameMap::initPlayer(double x, double y, double ang, double playerDim){
+	player.update(x, y, ang, playerDim);
+}
+
+void GameMap::movePlayer(std::set<int> keys, double speed, double angVel, double dt){
+	
+	double moveX, moveY;
+	moveX = moveY = 0.0;
+	
+	if( keys.count(SDLK_SPACE) != 0 ){
+		speed *= 2;
+		angVel *= 2;
+	}
+	for( int n : keys ){
+		switch(n){
+			
+			case SDLK_a:
+				player.ang += angVel*dt;
+				if( player.ang > 2*PI )
+					player.ang -= 2*PI;
+				break;
+			
+			case SDLK_s:
+				player.ang -= angVel*dt;
+				if( player.ang < 2*PI )
+					player.ang += 2*PI;
+				break;
+				
+			case SDLK_UP:
+				moveX += std::cos(player.ang)*speed*dt;
+				moveY -= std::sin(player.ang)*speed*dt;
+				break;
+			
+			case SDLK_DOWN:
+				moveX -= std::cos(player.ang)*speed*dt;
+				moveY += std::sin(player.ang)*speed*dt;
+				break;
+				
+			case SDLK_RIGHT:
+				moveX += std::sin(player.ang)*speed*dt;
+				moveY += std::cos(player.ang)*speed*dt;
+				break;
+			
+			case SDLK_LEFT:
+				moveX -= std::sin(player.ang)*speed*dt;
+				moveY -= std::cos(player.ang)*speed*dt;
+				break;
+		}
+	}
+	
+	player.x += moveX; player.y += moveY;
+	
+	if( tryMove(player) )
+		return;
+	
+	//clipping x direction movement
+	player.x -= moveX;
+	
+	if( tryMove(player) )
+		return;
+	
+	//clipping y direction movement
+	player.x += moveX;
+	player.y -= moveY;
+	
+	if( tryMove(player) )
+		return;
+	
+	//clipping full movement
+	player.x -= moveX;
+	
+	return;
+}
+
+bool GameMap::tryMove(MapObject player){
+	int xl, xh, yl, yh;
+	xl = (int)((player.x - player.objDim/2)/BLOCK_DIM);
+	xh = (int)((player.x + player.objDim/2)/BLOCK_DIM);
+	yl = (int)((player.y - player.objDim/2)/BLOCK_DIM);
+	yh = (int)((player.y + player.objDim/2)/BLOCK_DIM);
+	
+	for( int y = yl; y <= yh; y++ ){
+		for( int x = xl; x <= xh; x++ ){
+			if( mapArr[y*mapDims[1] + x]->isWall )
+				return false;
+		}
+	}
+	
+	return true;
 }
 //};
 /*

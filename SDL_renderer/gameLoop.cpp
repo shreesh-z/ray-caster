@@ -1,19 +1,19 @@
 //game Loop and Rendering
 #include <SDL2/SDL.h>
 #include <stdio.h>
+#include <set>
+#include <chrono>
+#define PI 3.1415926535897932384
 
 #include "GameMap.h"
 
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
-
-bool init();
-void close();
+const int SCREEN_WIDTH = 448;
+const int SCREEN_HEIGHT = 448;
 
 //the window on which everything is displayed
-SDL_Window* window = NULL;
+SDL_Window *window = NULL;
 //the surface of the main screen
-SDL_Surface* screenSurf = NULL;
+SDL_Surface *screenSurf = NULL;
 
 //Initializing SDL
 bool init_SDL(){
@@ -52,7 +52,11 @@ int main( int argc, char* args[] ){
 	
 	//to get a map image that can be displayed
 	SDL_Surface *mapSurf = SDL_CreateRGBSurface(0, 448, 448, 32, 0, 0, 0, 0);
+	
 	gMap.drawMap(mapSurf);
+	
+	//initializing the player
+	gMap.initPlayer(74, 74, PI/2, 10);
 	
 	//init SDL
 	if( !init_SDL() ){
@@ -65,6 +69,13 @@ int main( int argc, char* args[] ){
 		//to access events in the event queue
 		SDL_Event e;
 		
+		//to hold key presses
+		std::set<int> keys = {};
+		
+		//to calculate time difference between each frame
+		std::chrono::steady_clock::time_point oldTime = std::chrono::steady_clock::now();
+		std::chrono::steady_clock::time_point newTime = std::chrono::steady_clock::now();
+		
 		while( running ){
 			
 			//accessing events from the event queue
@@ -72,11 +83,36 @@ int main( int argc, char* args[] ){
 				//only check for quit event for now
 				if( e.type == SDL_QUIT ){
 					running = false;
+				}else if( e.type == SDL_KEYDOWN ){
+					//cap max number of keys pressed to 5
+					//add keypresses to set
+					if( keys.size() < 5 )
+						keys.insert(e.key.keysym.sym);
+					
+				}else if( e.type == SDL_KEYUP ){
+					//remove keys from set if they are lifted
+					if( !keys.empty() ){
+						keys.erase(e.key.keysym.sym);
+					}
 				}
 			}
 			
+			//get time now
+			newTime = std::chrono::steady_clock::now();
+			//calculate time difference in mus
+			double dt = std::chrono::duration_cast<std::chrono::microseconds>(newTime - oldTime).count();
+			//convert to time difference in seconds
+			dt *= 0.000001;
+			oldTime = newTime;
+			
+			//move player according to the keys pressed
+			gMap.movePlayer(keys, 60, 3, dt);
+			
 			//display map onto the screen
 			SDL_BlitSurface( mapSurf, NULL, screenSurf, NULL );
+			
+			//draw player on the screen
+			gMap.drawPlayer(screenSurf);
 			
 			//update the window
 			SDL_UpdateWindowSurface( window );
