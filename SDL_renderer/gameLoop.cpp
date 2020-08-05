@@ -7,8 +7,8 @@
 
 #include "GameMap.h"
 
-const int SCREEN_WIDTH = 448;
-const int SCREEN_HEIGHT = 448;
+const int SCREEN_WIDTH = 640;
+const int SCREEN_HEIGHT = 480;
 
 //the window on which everything is displayed
 SDL_Window *window = NULL;
@@ -30,6 +30,7 @@ bool init_SDL(){
 			printf( "Window couldnt be created. SDL error: %s\n", SDL_GetError() );
 			return false;
 		}else{
+			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 			//getting the window surface
 			screenSurf = SDL_GetWindowSurface( window );
 		}
@@ -46,9 +47,9 @@ void close_SDL(){
 }
 
 int main( int argc, char* args[] ){
-	
+		
 	//creating a map object
-	GameMap gMap("./Images/tester.bmp");
+	GameMap gMap("./Images/levelTrial2.bmp");
 	
 	//to get a map image that can be displayed
 	SDL_Surface *mapSurf = SDL_CreateRGBSurface(0, 448, 448, 32, 0, 0, 0, 0);
@@ -56,12 +57,18 @@ int main( int argc, char* args[] ){
 	gMap.drawMap(mapSurf);
 	
 	//initializing the player
-	gMap.initPlayer(74, 74, PI/2, 10);
+	gMap.initPlayer(80, 80, (7*PI)/2, 10);
 	
 	//init SDL
 	if( !init_SDL() ){
 		printf("Unable to start correctly.\n");
 	}else{
+		
+		/*printf("A Simple Ray Casting Engine - written by Shreesh\n");
+		printf("Use direction keys to move; a, s to turn\n");
+		printf("Press space to double movement speed\n");
+		printf("Press escape to exit\n");
+		printf("Press Enter to continue\n");*/
 		
 		//to run the game loop
 		bool running = true;
@@ -76,6 +83,10 @@ int main( int argc, char* args[] ){
 		std::chrono::steady_clock::time_point oldTime = std::chrono::steady_clock::now();
 		std::chrono::steady_clock::time_point newTime = std::chrono::steady_clock::now();
 		
+		SDL_Rect sky, ground;
+		sky.x = 0; sky.y = 0; sky.h = screenSurf->h >> 1; sky.w = screenSurf->w;
+		ground.x = 0; ground.y = screenSurf->h >> 1; ground.h = ground.y; ground.w = screenSurf->w;
+		
 		while( running ){
 			
 			//accessing events from the event queue
@@ -86,6 +97,10 @@ int main( int argc, char* args[] ){
 				}else if( e.type == SDL_KEYDOWN ){
 					//cap max number of keys pressed to 5
 					//add keypresses to set
+					if(e.key.keysym.sym == SDLK_ESCAPE){
+						running = false;
+						break;
+					}
 					if( keys.size() < 5 )
 						keys.insert(e.key.keysym.sym);
 					
@@ -106,13 +121,18 @@ int main( int argc, char* args[] ){
 			oldTime = newTime;
 			
 			//move player according to the keys pressed
-			gMap.movePlayer(keys, 60, 3, dt);
+			gMap.movePlayer(keys, 240, 2.5, dt);
 			
 			//display map onto the screen
-			SDL_BlitSurface( mapSurf, NULL, screenSurf, NULL );
+			//SDL_BlitSurface( mapSurf, NULL, screenSurf, NULL );
 			
 			//draw player on the screen
-			gMap.drawPlayer(screenSurf);
+			//gMap.drawPlayer(screenSurf);
+			
+			SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
+			SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
+			
+			gMap.castRays( screenSurf, 30, 20, 0.75 );
 			
 			//update the window
 			SDL_UpdateWindowSurface( window );

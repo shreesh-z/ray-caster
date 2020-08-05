@@ -33,6 +33,7 @@ class GameMap{
 	public:
 		//Width of a wall
 		const unsigned BLOCK_DIM = 64;
+		const unsigned TILESHIFT = 6;
 		
 		//creates the game map by importing a bitmap file
 		//uses SDL's internal mechanisms to read the bitmap file and create the map array
@@ -49,6 +50,8 @@ class GameMap{
 		void movePlayer(std::set<int> keys, double speed, double angVel, double dt);
 		
 		bool tryMove(MapObject player);
+		
+		void castRays(SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
 };
 
 #endif
