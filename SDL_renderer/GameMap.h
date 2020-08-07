@@ -3,7 +3,7 @@
 
 #include <SDL2/SDL.h>
 #include <set>
-#include "MapObject.h"
+//#include "MapObject.h"
 
 struct Block{
 	//Holds the color tuple for the wall colors
@@ -28,7 +28,9 @@ class GameMap{
 		//Number of horiz and vertical walls
 		int H_WALL_CNT, V_WALL_CNT;
 		
-		MapObject player;
+		//MapObject player;
+		
+		int mapZoom;
 	
 	public:
 		//Width of a wall
@@ -38,20 +40,21 @@ class GameMap{
 		//creates the game map by importing a bitmap file
 		//uses SDL's internal mechanisms to read the bitmap file and create the map array
 		GameMap(const char *imgPath);
+		~GameMap();
 		
-		void initPlayer(double x, double y, double ang, double playerDim);
-		
-		void drawPlayer(SDL_Surface *screenSurf);
 		//prints the map to the console
 		void printMap();
 		//draws the map onto the screen surface passed to it
-		void drawMap(SDL_Surface *screenSurf);
+		void drawFullMap(SDL_Surface *screenSurf);
 		
-		void movePlayer(std::set<int> keys, double speed, double angVel, double dt);
+		Block* block_at( int x, int y );
+		Block* horiz_wall_at( int x, int y );
+		Block* vert_wall_at( int x, int y );
+		bool solid_block_at( int y, int x );
+		bool solid_horiz_wall_at( int x, int y );
+		bool solid_vert_wall_at( int x, int y );
 		
-		bool tryMove(MapObject player);
-		
-		void castRays(SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
+		void draw2DMap(SDL_Surface *screenSurf, int posX, int posY);
 };
 
 #endif

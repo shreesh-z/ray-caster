@@ -543,7 +543,7 @@ def main():
     player = Player(85,85,math.radians(360-45),10)
     
     #initializing the map with the map image
-    gMap = GameMap('./levelTrial.bmp', BLOCK_WIDTH, BLOCK_LENGTH, 0, 0)
+    gMap = GameMap('./levelTrial3.bmp', BLOCK_WIDTH, BLOCK_LENGTH, 0, 0)
     
     #initializing screen surface, True for fullSc
     screen = getScreen(scDims, True)

@@ -5,7 +5,6 @@
 //Refer to this header file for documentation
 //since header file already includes SDL, no need to include again
 #include "GameMap.h"
-#include "MapObject.h"
 
 //for a general block
 Block::Block(Uint8 R_, Uint8 G_, Uint8 B_, bool isWall_){
@@ -21,6 +20,8 @@ Block::Block() : Block(0, 0, 0, false){}
 //uses SDL's internal mechanisms to read the bitmap file and create the map array
 GameMap::GameMap(const char *imgPath){
 	
+	//default is 16, can't be changed as of now
+	mapZoom = 16;
 	//The surface of the image
 	SDL_Surface *mapImg = SDL_LoadBMP( imgPath );
 	
@@ -62,12 +63,15 @@ GameMap::GameMap(const char *imgPath){
 			for( int k = 2; k >= 0; k-- ){
 				
 				//setting block's color tuple to pixel's color tuple
+				//bytes are stored in reverse order in the surface, ie BGR
 				newBlock->colors[k] = pixel[i*mapImg->pitch + j + 2 - k];
 				
 				//if any tuple value is nonzero, it's a wall block
 				if( newBlock->colors[k] != 0 )
 					newBlock->isWall = true;
 				else
+					//setting it to a dark gray so that
+					//when draw distance is reached, a full black isn't displayed
 					newBlock->colors[k] = 50;
 			}
 			
@@ -84,7 +88,7 @@ GameMap::GameMap(const char *imgPath){
 	}
 	
 	//setting walls around solid blocks as solid walls
-	//if the wall is around an empty block, it's also set as empty
+	//if the wall is around an empty block, nothing is done
 	for( int i = 0; i < mapDims[0]; i++ ){
 		for( int j = 0; j < mapDims[1]; j++){
 			
@@ -98,6 +102,59 @@ GameMap::GameMap(const char *imgPath){
 			}
 		}
 	}
+}
+
+GameMap::~GameMap(){
+	for( int i = 0; i < mapDims[0]*mapDims[1]; i++ ){
+		delete mapArr[i];
+	}
+	delete mapArr;
+	delete mapVLines;
+	delete mapHLines;
+}
+
+
+//for other components to extract array elements
+Block* GameMap::block_at( int y, int x ){
+	if( x >= 0 && x < mapDims[1] && y >= 0 && y < mapDims[0] )
+		return mapArr[y*mapDims[1] + x];
+	else
+		return NULL;
+}
+
+Block* GameMap::horiz_wall_at( int y, int x ){
+	if( x >= 0 && x < mapDims[1] && y >= 0 && y < H_WALL_CNT )
+		return mapHLines[y*mapDims[1] + x];
+	else
+		return NULL;
+}
+
+Block* GameMap::vert_wall_at( int y, int x ){
+	if( x >= 0 && x < V_WALL_CNT && y >= 0 && y < mapDims[0] )
+		return mapVLines[y*V_WALL_CNT + x];
+	else
+		return NULL;
+}
+
+bool GameMap::solid_block_at( int y, int x ){
+	if( x >= 0 && x < mapDims[1] && y >= 0 && y < mapDims[0] )
+		return mapArr[y*mapDims[1] + x]->isWall;
+	else
+		return false;
+}
+
+bool GameMap::solid_horiz_wall_at( int y, int x ){
+	if( x >= 0 && x < mapDims[1] && y >= 0 && y < H_WALL_CNT )
+		return mapHLines[y*mapDims[1] + x]->isWall;
+	else
+		return false;
+}
+
+bool GameMap::solid_vert_wall_at( int y, int x ){
+	if( x >= 0 && x < V_WALL_CNT && y >= 0 && y < mapDims[0] )
+		return mapVLines[y*V_WALL_CNT + x]->isWall;
+	else
+		return false;
 }
 
 //to print the map to the console, only for debugging
@@ -134,8 +191,9 @@ void GameMap::printMap(){
 	printf("\n");
 }
 
-//draws the map onto the surface passed to the function
-void GameMap::drawMap(SDL_Surface* mapSurf){
+//draws the full map onto the surface passed to the function
+void GameMap::drawFullMap(SDL_Surface* mapSurf){
+	
 	for( int i = 0; i < mapDims[0]; i++ ){
 		for( int j = 0; j < mapDims[1]; j++ ){
 			SDL_Rect blockRect;
@@ -152,275 +210,39 @@ void GameMap::drawMap(SDL_Surface* mapSurf){
 	}
 }
 
-void GameMap::drawPlayer(SDL_Surface *screenSurf){
-	//drawing player square
-	SDL_Rect playRect;
-	playRect.x = player.x-player.objDim/2;
-	playRect.y = player.y-player.objDim/2;
-	playRect.w = player.objDim; playRect.h = player.objDim;
-	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 255, 0 ) );
+void GameMap::draw2DMap(SDL_Surface *screenSurf, int posX, int posY){
 	
-	playRect.x = player.x + player.objDim*std::cos(player.ang);
-	playRect.y = player.y - player.objDim*std::sin(player.ang);
-	playRect.w = 5; playRect.h = 5;
-	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
-}
-
-void GameMap::initPlayer(double x, double y, double ang, double playerDim){
-	player.update(x, y, ang, playerDim);
-}
-
-void GameMap::movePlayer(std::set<int> keys, double speed, double angVel, double dt){
+	int mapX = posX >> TILESHIFT;
+	int mapY = posY >> TILESHIFT;
+	int xOffs = (posX - (mapX << TILESHIFT) ) >> 1;
+	int yOffs = (posY - (mapY << TILESHIFT) ) >> 1;
 	
-	double moveX, moveY;
-	moveX = moveY = 0.0;
+	int mapxL, mapxH, mapyL, mapyH;
+	mapxL = mapX - mapZoom; mapyL = mapY - mapZoom;
+	mapxH = mapX + mapZoom; mapyH = mapY + mapZoom;
+	if( mapxL < 0 ) mapxL = 0;
+	if( mapxH >= mapDims[1] ) mapxH = mapDims[1] - 1;
+	if( mapyL < 0 ) mapyL = 0;
+	if( mapyH >= mapDims[0] ) mapyH = mapDims[0] - 1;
 	
-	if( keys.count(SDLK_SPACE) != 0 ){
-		speed *= 2;
-		angVel *= 2;
-	}
-	for( int n : keys ){
-		switch(n){
+	xOffs = ((screenSurf->w) >> 1) - xOffs;
+	yOffs = ((screenSurf->h) >> 1) - yOffs;
+	
+	xOffs -= (mapX - mapxL) << (TILESHIFT - 1);
+	yOffs -= (mapY - mapyL) << (TILESHIFT - 1);
+	
+	for( int i = mapyL; i <= mapyH; i++ ){
+		for( int j = mapxL; j <= mapxH; j++ ){
+			SDL_Rect blockRect;
+			blockRect.x = xOffs + ((j - mapxL) << (TILESHIFT - 1));
+			blockRect.y = yOffs + ((i - mapyL) << (TILESHIFT - 1));
+			blockRect.w = BLOCK_DIM >> 1; blockRect.h = BLOCK_DIM >> 1;
 			
-			case SDLK_a:
-				player.ang += angVel*dt;
-				if( player.ang > 2*PI )
-					player.ang -= 2*PI;
-				break;
-			
-			case SDLK_s:
-				player.ang -= angVel*dt;
-				if( player.ang < 0 )
-					player.ang += 2*PI;
-				break;
-				
-			case SDLK_UP:
-				moveX += std::cos(player.ang)*speed*dt;
-				moveY -= std::sin(player.ang)*speed*dt;
-				break;
-			
-			case SDLK_DOWN:
-				moveX -= std::cos(player.ang)*speed*dt;
-				moveY += std::sin(player.ang)*speed*dt;
-				break;
-				
-			case SDLK_RIGHT:
-				moveX += std::sin(player.ang)*speed*dt;
-				moveY += std::cos(player.ang)*speed*dt;
-				break;
-			
-			case SDLK_LEFT:
-				moveX -= std::sin(player.ang)*speed*dt;
-				moveY -= std::cos(player.ang)*speed*dt;
-				break;
+			SDL_FillRect( screenSurf, &blockRect, SDL_MapRGB(screenSurf->format,
+						mapArr[i*mapDims[1] + j]->colors[0],
+						mapArr[i*mapDims[1] + j]->colors[1],
+						mapArr[i*mapDims[1] + j]->colors[2])
+						);
 		}
 	}
-	
-	player.x += moveX; player.y += moveY;
-	
-	if( tryMove(player) )
-		return;
-	
-	//clipping x direction movement
-	player.x -= moveX;
-	
-	if( tryMove(player) )
-		return;
-	
-	//clipping y direction movement
-	player.x += moveX;
-	player.y -= moveY;
-	
-	if( tryMove(player) )
-		return;
-	
-	//clipping full movement
-	player.x -= moveX;
-	
-	return;
 }
-
-bool GameMap::tryMove(MapObject player){
-	int xl, xh, yl, yh;
-	xl = (int)(player.x - player.objDim/2) >> TILESHIFT;
-	xh = (int)(player.x + player.objDim/2) >> TILESHIFT;
-	yl = (int)(player.y - player.objDim/2) >> TILESHIFT;
-	yh = (int)(player.y + player.objDim/2) >> TILESHIFT;
-	
-	for( int y = yl; y <= yh; y++ ){
-		for( int x = xl; x <= xh; x++ ){
-			if( mapArr[y*mapDims[1] + x]->isWall )
-				return false;
-		}
-	}
-	
-	return true;
-}
-
-void GameMap::castRays(SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio){
-	int wid = screenSurf->w, hig = screenSurf->h;
-	double radAngRange = (PI*angRange)/180.0; //angle in radians
-	int rayCount = wid;
-	double screenDist = (double)wid/( 2*std::tan(radAngRange) );
-	//printf("%lf, %lf\n", radAngRange, screenDist);
-	//int rayWid = 1;
-	int rayHig;
-	//double rayCenterX = 0.5;
-	
-	double hRayX, hRayY, vRayX, vRayY, h_xOffs, h_yOffs, v_xOffs, v_yOffs;
-	int vmapX, vmapY, hmapX, hmapY;
-	
-	vmapX = vmapY = hmapX = hmapY = 0;
-	
-	double rayAng = player.ang + radAngRange;
-	
-	Uint8 wallColor[3];
-	
-	for( int i = 0; i < rayCount; i++ ){
-	
-		double rAng = rayAng;
-		if( rAng > 2*PI )
-			rAng -= 2*PI;
-		if( rAng < 0 )
-			rAng += 2*PI;
-		
-		//printf("Reached\n");
-		
-		double tanAng = std::tan(rAng);
-		int dof = 0;
-		
-		//first, checking for horizontal wall collisions            
-		if ( rAng > PI ){                 //looking down
-			//projecting the ray onto the vertical grid line
-			hRayY = (double)( ( ( (int)(player.y) >> TILESHIFT ) << TILESHIFT ) + BLOCK_DIM );
-			//calculating the point of intersection with nearest horiz. wall
-			hRayX = player.x - (hRayY - player.y)/tanAng;
-			
-			//calculating the offsets for further ray casting
-			h_yOffs = (double)BLOCK_DIM;
-			h_xOffs = -h_yOffs/tanAng;
-			
-		}else if ( rAng < PI and rAng > 0 ){ //looking up
-			hRayY = (double)( ( (int)(player.y) >> TILESHIFT ) << TILESHIFT );
-			hRayX = player.x + (player.y - hRayY)/tanAng;
-			h_yOffs = -(double)BLOCK_DIM;
-			h_xOffs = -h_yOffs/tanAng;
-			
-		}else{
-			//if the ray is perfectly left or right, dont' cast it,
-			//as it will never meet a horizontal wall
-			hRayX = player.x;
-			hRayY = player.y;
-			dof = depth;
-		}
-		
-		
-			//casting until depth of field is reached
-		while( dof < depth ){
-			//extracting the map indices from ray positions
-			hmapX = (int)(hRayX) >> TILESHIFT;
-			hmapY = (int)(hRayY) >> TILESHIFT;
-			
-			//if the ray hit a horiz. wall
-			if( hmapX >= 0 && hmapX < mapDims[1] 
-				&& hmapY >= 0 && hmapY < mapDims[0]
-				&& mapHLines[hmapY*mapDims[1] + hmapX]->isWall )
-				break;
-			//if not, keep going
-			else{
-				hRayX += h_xOffs;
-				hRayY += h_yOffs;
-			}
-			dof++;
-		}
-		
-		dof = 0;
-		
-		//then, checking for vertical wall collisions
-		if( rAng > PI/2 && rAng < (3*PI)/2 ){   //looking left
-			//projecting the ray onto a horizontal grid line
-			vRayX = (double)( ( (int)player.x >> TILESHIFT ) << TILESHIFT );
-			//calculating the point of intersection with the nearest vert. wall
-			vRayY = player.y + (player.x - vRayX)*tanAng;
-			
-			//calculating the offsets for further ray casting
-			v_xOffs = -(double)BLOCK_DIM;
-			v_yOffs = -v_xOffs*tanAng;
-			
-		}else if( rAng > (3*PI)/2 || rAng < PI*2 ){  //looking right
-			vRayX = (double)( ( ( (int)player.x >> TILESHIFT ) << TILESHIFT ) + BLOCK_DIM );
-			vRayY = player.y - (vRayX - player.x)*tanAng;
-			v_xOffs = (double)BLOCK_DIM;
-			v_yOffs = -v_xOffs*tanAng;
-		}else{
-			//if the ray is perfectly up or down, don't cast it,
-			//as it will never meet a vertical wall
-			vRayX = player.x;
-			vRayY = player.y;
-			dof = depth;
-		}
-			
-		//casting until depth of field is reached
-		while( dof < depth ){
-			//extracting the map indices from ray positions
-			vmapX = (int)(vRayX) >> TILESHIFT;
-			vmapY = (int)(vRayY) >> TILESHIFT;
-			
-			//if the ray hit a vert. wall
-			if( vmapX >= 0 && vmapX < mapDims[1] 
-				&& vmapY >= 0 && vmapY < mapDims[0]
-				&& mapVLines[vmapY*V_WALL_CNT + vmapX]->isWall )
-				break;
-			//if not, keep going
-			else{
-				vRayX += v_xOffs;
-				vRayY += v_yOffs;
-			}
-			dof++;
-		}
-		
-		double vDist = std::fabs((player.x - vRayX)/std::cos(rAng));
-		double hDist = std::fabs((player.x - hRayX)/std::cos(rAng));
-		double finalDist;
-		
-		if( vDist > hDist ){
-			finalDist = hDist;
-			for( int j = 0; j < 3; j++ )
-				wallColor[j] = mapHLines[hmapY*mapDims[1] + hmapX]->colors[j];
-		}else{
-			finalDist = vDist;
-			for( int j = 0; j < 3; j++ )
-				wallColor[j] = wallColorRatio*mapVLines[vmapY*V_WALL_CNT + vmapX]->colors[j];
-		}
-		
-		finalDist *= std::cos(rAng - player.ang);
-		
-		if( finalDist == 0.0 ){
-			//printf("Reached\n");
-			rayAng += (2*radAngRange)/rayCount;
-			continue;
-		}
-		
-		rayHig = ( BLOCK_DIM * screenDist )/finalDist;
-		
-		rayHig = rayHig > hig ? hig : rayHig;
-		
-		SDL_Rect slice;
-		slice.y = (hig - rayHig) >> 1; slice.x = i;
-		//slice.x = 0; slice.y = i;
-		slice.h = rayHig; slice.w = 2;
-		
-		//printf("%d, %d, %d, %d\n", slice.x, slice.y, slice.w, slice. h);
-		
-		SDL_FillRect( screenSurf, &slice, SDL_MapRGB(screenSurf->format, wallColor[0], wallColor[1], wallColor[2] ) );
-		
-		rayAng -= (2*radAngRange)/rayCount;
-	}
-}
-//};
-/*
-int main( int argc, char* args[] ){
-	GameMap g("./Images/tester.bmp");
-	g.printMap();
-	return 0;
-}*/

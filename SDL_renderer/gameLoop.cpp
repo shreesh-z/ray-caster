@@ -6,6 +6,10 @@
 #define PI 3.1415926535897932384
 
 #include "GameMap.h"
+#include "MapObject.h"
+
+const unsigned BLOCK_DIM = 64;
+const unsigned TILESHIFT = 6;
 
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
@@ -14,6 +18,9 @@ const int SCREEN_HEIGHT = 480;
 SDL_Window *window = NULL;
 //the surface of the main screen
 SDL_Surface *screenSurf = NULL;
+
+void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
+void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, double angVel, double dt);
 
 //Initializing SDL
 bool init_SDL(){
@@ -49,15 +56,16 @@ void close_SDL(){
 int main( int argc, char* args[] ){
 		
 	//creating a map object
-	GameMap gMap("./Images/levelTrial2.bmp");
+	GameMap gMap("./Images/levelTrial3.bmp");
 	
 	//to get a map image that can be displayed
 	SDL_Surface *mapSurf = SDL_CreateRGBSurface(0, 448, 448, 32, 0, 0, 0, 0);
 	
-	gMap.drawMap(mapSurf);
+	gMap.drawFullMap(mapSurf);
 	
 	//initializing the player
-	gMap.initPlayer(80, 80, (7*PI)/2, 10);
+	//gMap.initPlayer(80, 80, (7*PI)/2, 10);
+	MapObject player(80.0, 80.0, (7*PI)/2, 10);
 	
 	//init SDL
 	if( !init_SDL() ){
@@ -73,6 +81,8 @@ int main( int argc, char* args[] ){
 		//to run the game loop
 		bool running = true;
 		
+		bool show3D = true;
+		
 		//to access events in the event queue
 		SDL_Event e;
 		
@@ -83,6 +93,7 @@ int main( int argc, char* args[] ){
 		std::chrono::steady_clock::time_point oldTime = std::chrono::steady_clock::now();
 		std::chrono::steady_clock::time_point newTime = std::chrono::steady_clock::now();
 		
+		//to show sky and ground in 3D scene
 		SDL_Rect sky, ground;
 		sky.x = 0; sky.y = 0; sky.h = screenSurf->h >> 1; sky.w = screenSurf->w;
 		ground.x = 0; ground.y = screenSurf->h >> 1; ground.h = ground.y; ground.w = screenSurf->w;
@@ -93,21 +104,36 @@ int main( int argc, char* args[] ){
 			while( SDL_PollEvent( &e ) != 0 ){
 				//only check for quit event for now
 				if( e.type == SDL_QUIT ){
+					
 					running = false;
+					
 				}else if( e.type == SDL_KEYDOWN ){
-					//cap max number of keys pressed to 5
-					//add keypresses to set
+					
+					
 					if(e.key.keysym.sym == SDLK_ESCAPE){
+						
 						running = false;
 						break;
-					}
-					if( keys.size() < 5 )
+						
+					}else if(e.key.keysym.sym == SDLK_TAB ){
+						
+						show3D = !show3D;
+						
+					}else if( keys.size() < 5 )
+						//cap max number of keys pressed to 5
+						//add keypresses to set
 						keys.insert(e.key.keysym.sym);
 					
 				}else if( e.type == SDL_KEYUP ){
 					//remove keys from set if they are lifted
-					if( !keys.empty() ){
+					if(e.key.keysym.sym == SDLK_TAB)
+						
+						continue;
+						
+					else if( !keys.empty() ){
+						
 						keys.erase(e.key.keysym.sym);
+						
 					}
 				}
 			}
@@ -121,7 +147,7 @@ int main( int argc, char* args[] ){
 			oldTime = newTime;
 			
 			//move player according to the keys pressed
-			gMap.movePlayer(keys, 240, 2.5, dt);
+			input( &gMap, &player, keys, 240, 1.5, dt );
 			
 			//display map onto the screen
 			//SDL_BlitSurface( mapSurf, NULL, screenSurf, NULL );
@@ -129,10 +155,16 @@ int main( int argc, char* args[] ){
 			//draw player on the screen
 			//gMap.drawPlayer(screenSurf);
 			
-			SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
-			SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
-			
-			gMap.castRays( screenSurf, 30, 20, 0.75 );
+			if( show3D ){
+				SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
+				SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
+				
+				castRays( &gMap, &player, screenSurf, 30, 20, 0.75 );
+			}else{
+				SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
+				gMap.draw2DMap( screenSurf , player.x, player.y );
+				player.draw2DMap( screenSurf );
+			}
 			
 			//update the window
 			SDL_UpdateWindowSurface( window );
@@ -145,4 +177,226 @@ int main( int argc, char* args[] ){
 	close_SDL();
 	
 	return 0;
+}
+
+void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, double angVel, double dt){
+	double moveX, moveY, moveAng;
+	moveX = moveY = moveAng = 0.0;
+	
+	if( keys.count(SDLK_SPACE) != 0 ){
+		speed *= 2;
+		angVel *= 2;
+	}
+	
+	for(int n : keys){
+		switch(n){
+			
+			case SDLK_a:
+				moveAng += angVel*dt;
+				break;
+			
+			case SDLK_s:
+				moveAng -= angVel*dt;
+				break;
+				
+			case SDLK_UP:
+				moveX += speed*dt;
+				break;
+			
+			case SDLK_DOWN:
+				moveX -= speed*dt;
+				break;
+			
+			case SDLK_RIGHT:
+				moveY += speed*dt;
+				break;
+			
+			case SDLK_LEFT:
+				moveY -= speed*dt;
+				break;
+			
+		}
+	}
+	
+	player->move(gMap, moveX, moveY, moveAng, true);
+}
+
+void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio){
+	
+	//dimensions of the screen
+	int wid = screenSurf->w, hig = screenSurf->h;
+	
+	//range of angles in which the rays are casted (in radians)
+	double radAngRange = (PI*angRange)/180.0;
+	//num of rays casted
+	int rayCount = wid;
+	
+	//distance away from the player where the "screen" is situated.
+	//all rays are projected onto this screen
+	double screenDist = (double)wid/( 2*std::tan(radAngRange) );
+	
+	//the height of the slice of the wall where the ray hits
+	int rayHig;
+	
+	//variables used purely for ray casting
+	double hRayX, hRayY, vRayX, vRayY, h_xOffs, h_yOffs, v_xOffs, v_yOffs;
+	//map indices where the ray hits the wall
+	int vmapX, vmapY, hmapX, hmapY;
+	
+	vmapX = vmapY = hmapX = hmapY = 0;
+	
+	//angle at which ray casting starts (from left to right)
+	double rayAng = player->ang + radAngRange;
+	
+	for( int i = 0; i < rayCount; i++ ){
+	
+		double rAng = rayAng;
+		//calculating ray modulo 2pi
+		if( rAng > 2*PI )
+			rAng -= 2*PI;
+		if( rAng < 0 )
+			rAng += 2*PI;
+		
+		double tanAng = std::tan(rAng);
+		int dof = 0;
+		
+		//first, checking for horizontal wall collisions            
+		if ( rAng > PI ){	//looking down
+			
+			//projecting the ray onto the vertical grid line
+			hRayY = (double)( ( ( (int)(player->y) >> TILESHIFT ) << TILESHIFT ) + BLOCK_DIM );
+			//calculating the point of intersection with nearest horiz. wall
+			hRayX = player->x - (hRayY - player->y)/tanAng;
+			
+			//calculating the offsets for further ray casting
+			h_yOffs = (double)BLOCK_DIM;
+			h_xOffs = -h_yOffs/tanAng;
+			
+		}else if ( rAng < PI and rAng > 0 ){ //looking up
+			hRayY = (double)( ( (int)(player->y) >> TILESHIFT ) << TILESHIFT );
+			hRayX = player->x + (player->y - hRayY)/tanAng;
+			h_yOffs = -(double)BLOCK_DIM;
+			h_xOffs = -h_yOffs/tanAng;
+			
+		}else{
+			//if the ray is perfectly left or right, dont' cast it,
+			//as it will never meet a horizontal wall
+			hRayX = player->x;
+			hRayY = player->y;
+			dof = depth;
+		}
+		
+		
+		//casting until depth of field is reached
+		while( dof < depth ){
+			//extracting the map indices from ray positions
+			hmapX = (int)(hRayX) >> TILESHIFT;
+			hmapY = (int)(hRayY) >> TILESHIFT;
+			
+			//if the ray hit a horiz. wall
+			if( gMap->solid_horiz_wall_at( hmapY, hmapX ) )
+				break;
+			//if not, keep going
+			else{
+				hRayX += h_xOffs;
+				hRayY += h_yOffs;
+			}
+			dof++;
+		}
+		
+		dof = 0;
+		
+		//then, checking for vertical wall collisions
+		if( rAng > PI/2 && rAng < (3*PI)/2 ){   //looking left
+			
+			//projecting the ray onto a horizontal grid line
+			vRayX = (double)( ( (int)player->x >> TILESHIFT ) << TILESHIFT );
+			//calculating the point of intersection with the nearest vert. wall
+			vRayY = player->y + (player->x - vRayX)*tanAng;
+			
+			//calculating the offsets for further ray casting
+			v_xOffs = -(double)BLOCK_DIM;
+			v_yOffs = -v_xOffs*tanAng;
+			
+		}else if( rAng > (3*PI)/2 || rAng < PI*2 ){  //looking right
+			vRayX = (double)( ( ( (int)player->x >> TILESHIFT ) << TILESHIFT ) + BLOCK_DIM );
+			vRayY = player->y - (vRayX - player->x)*tanAng;
+			v_xOffs = (double)BLOCK_DIM;
+			v_yOffs = -v_xOffs*tanAng;
+		}else{
+			//if the ray is perfectly up or down, don't cast it,
+			//as it will never meet a vertical wall
+			vRayX = player->x;
+			vRayY = player->y;
+			dof = depth;
+		}
+			
+		//casting until depth of field is reached
+		while( dof < depth ){
+			//extracting the map indices from ray positions
+			vmapX = (int)(vRayX) >> TILESHIFT;
+			vmapY = (int)(vRayY) >> TILESHIFT;
+			
+			//if the ray hit a vert. wall
+			if( gMap->solid_vert_wall_at( vmapY, vmapX ) )
+				break;
+			//if not, keep going
+			else{
+				vRayX += v_xOffs;
+				vRayY += v_yOffs;
+			}
+			dof++;
+		}
+		
+		//double vDist = std::fabs((player->x - vRayX)/std::cos(rAng));
+		//double hDist = std::fabs((player->x - hRayX)/std::cos(rAng));
+		double vDist = std::hypot(player->x - vRayX, player->y - vRayY);
+		double hDist = std::hypot(player->x - hRayX, player->y - hRayY);
+		//which among the two is smallest
+		double finalDist;
+		//color of wall which the ray hit
+		Uint8 wallColor[3];
+		wallColor[0] = wallColor[1] = wallColor[2] = 0;
+		
+		if( vDist > hDist ){
+			finalDist = hDist;
+			Block *wall = gMap->horiz_wall_at( hmapY, hmapX );
+			
+			if( wall != NULL ){
+				for( int j = 0; j < 3; j++ )
+					wallColor[j] = wall->colors[j];
+			}
+		}else{
+			finalDist = vDist;
+			Block *wall = gMap->vert_wall_at( vmapY, vmapX );
+			
+			if( wall != NULL ){
+				for( int j = 0; j < 3; j++ )
+					wallColor[j] = wallColorRatio*wall->colors[j];
+			}
+		}
+		
+		//removing fish eye effect
+		finalDist *= std::cos(rAng - player->ang);
+		
+		if( finalDist == 0.0 ){
+			//if intersecting with a wall, reject ray
+			////this avoids zero division////
+			rayAng += (2*radAngRange)/rayCount;
+			continue;
+		}
+		
+		rayHig = ( BLOCK_DIM * screenDist )/finalDist;
+		
+		//capping ray height at screen height
+		rayHig = rayHig > hig ? hig : rayHig;
+		
+		SDL_Rect slice;
+		slice.y = (hig - rayHig) >> 1; slice.x = i;
+		slice.h = rayHig; slice.w = 1;
+		
+		SDL_FillRect( screenSurf, &slice, SDL_MapRGB(screenSurf->format, wallColor[0], wallColor[1], wallColor[2] ) );
+		
+		rayAng -= (2*radAngRange)/rayCount;
+	}
 }
