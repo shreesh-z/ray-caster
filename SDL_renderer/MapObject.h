@@ -32,8 +32,8 @@
 		private:
 			bool has_seen;
 		public:
-			bool check_player(MapObject player);
-			void follow_player(MapObject player);
+			bool check_for_player(MapObject *player);
+			void follow_player(MapObject *player);
 			void reset();
 	};*/
 	

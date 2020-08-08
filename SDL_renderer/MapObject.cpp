@@ -117,7 +117,7 @@ bool MapObject::tryMove(GameMap *gMap){
 	has_seen = false;
 }
 
-bool Agent::check_player(MapObject player){
+bool Agent::check_for_player(MapObject *player){
 	if( has_seen ) return true;
 	int diffX = (int)(x - player.x) >> TILESHIFT;
 	int diffY = (int)(y - player.y) >> TILESHIFT;
@@ -126,7 +126,7 @@ bool Agent::check_player(MapObject player){
 	return has_seen;
 }
 
-Agent::follow_player(MapObject player){
+Agent::follow_player(MapObject *player){
 	if( check_player( player ) ){
 		
 	}

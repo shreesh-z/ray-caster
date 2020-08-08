@@ -21,6 +21,8 @@ SDL_Surface *screenSurf = NULL;
 
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
 void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, double angVel, double dt);
+void sprite2D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player);
+void sprite3D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread);
 
 //Initializing SDL
 bool init_SDL(){
@@ -37,7 +39,7 @@ bool init_SDL(){
 			printf( "Window couldnt be created. SDL error: %s\n", SDL_GetError() );
 			return false;
 		}else{
-			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			//SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 			//getting the window surface
 			screenSurf = SDL_GetWindowSurface( window );
 		}
@@ -60,6 +62,7 @@ int main( int argc, char* args[] ){
 	
 	//to get a map image that can be displayed
 	SDL_Surface *mapSurf = SDL_CreateRGBSurface(0, 448, 448, 32, 0, 0, 0, 0);
+	SDL_Surface *spriteSurf = SDL_LoadBMP("./Images/sprite.bmp");
 	
 	gMap.drawFullMap(mapSurf);
 	
@@ -160,6 +163,7 @@ int main( int argc, char* args[] ){
 				SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
 				
 				castRays( &gMap, &player, screenSurf, 30, 20, 0.75 );
+				sprite3D( screenSurf, spriteSurf, &player, 128, 128, 0.5235987755982988 );	//30degs
 			}else{
 				SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
 				gMap.draw2DMap( screenSurf , player.x, player.y );
@@ -177,6 +181,46 @@ int main( int argc, char* args[] ){
 	close_SDL();
 	
 	return 0;
+}
+
+//returns actual angle for given base and height of triangle
+inline double real_atan(double diffX, double diffY){
+	double sprite_ang = std::atan( diffY / diffX );
+	if( sprite_ang > 0 ){
+		if( diffY < 0 && diffX < 0 )
+			sprite_ang += PI;	//3rd quadrant
+	}else{
+		if( diffY > 0 && diffX < 0 )
+			sprite_ang += PI;	//2nd quadrant
+		else
+			sprite_ang += 2*PI;	//4th quadrant
+	}
+	//unchanged if 1st quadrant
+	return sprite_ang;
+}
+
+void sprite3D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread){
+	//axes are normal cartesian coordinates, have to flip y axis
+	double diffX = -(player->x - x);
+	double diffY = -(y - player->y);
+	
+	double ang_diff =  player->ang - real_atan( diffX, diffY ) ;
+	
+	if( std::abs(ang_diff) <= spread + 0.2 ){
+		int wid = screenSurf->w;
+		//horiz position on screen to center the sprite at
+		double pos = (int)((double)(wid >> 1)*( 1 + ang_diff/spread ));
+		
+		double dist = std::hypot( x - player->x , y - player->y );
+		double screenDist = (double)wid/( 2*std::tan(spread) );
+		double siz = (50.0*screenDist/dist);
+		siz = siz > screenSurf->h ? (double)screenSurf->h : siz;
+		
+		SDL_Rect dstRect;
+		dstRect.x = (int)pos - ((int)siz >> 1); dstRect.y = (screenSurf->h - (int)siz) >> 1;
+		dstRect.h = (int)siz; dstRect.w = (int)siz;
+		SDL_BlitScaled(spriteSurf, NULL, screenSurf, &dstRect);
+	}
 }
 
 void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, double angVel, double dt){
