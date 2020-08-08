@@ -23,9 +23,9 @@ SDL_Surface *screenSurf = NULL;
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
 void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, double angVel, double dt);
 void sprite2D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player);
-void sprite3D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread);
-bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int *depth, int *mapX, int *mapY, double *dist );
-bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int *depth, int *mapX, int *mapY, double *dist );
+void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread);
+bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int depth, int *mapX, int *mapY, double *dist );
+bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int depth, int *mapX, int *mapY, double *dist );
 
 //Initializing SDL
 bool init_SDL(){
@@ -42,7 +42,7 @@ bool init_SDL(){
 			printf( "Window couldnt be created. SDL error: %s\n", SDL_GetError() );
 			return false;
 		}else{
-			//SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 			//getting the window surface
 			screenSurf = SDL_GetWindowSurface( window );
 		}
@@ -62,11 +62,12 @@ int main( int argc, char* args[] ){
 		
 	//creating a map object
 	GameMap gMap("./Images/levelTrial3.bmp");
+	//GameMap gMap("./Images/spriteTest.bmp");
 	
 	
 	//to get a map image that can be displayed
 	SDL_Surface *mapSurf = SDL_CreateRGBSurface(0, 448, 448, 32, 0, 0, 0, 0);
-	SDL_Surface *spriteSurf = SDL_LoadBMP("./Images/sprite2.bmp");
+	SDL_Surface *spriteSurf = SDL_LoadBMP("./Images/sprite3.bmp");
 	
 	gMap.drawFullMap(mapSurf);
 	
@@ -167,7 +168,7 @@ int main( int argc, char* args[] ){
 				SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
 				
 				castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD, 0.75 );
-				sprite3D( screenSurf, spriteSurf, &player, 256, 256, 0.5235987755982988 );	//30degs
+				sprite3D( &gMap, screenSurf, spriteSurf, &player, 256, 256, 0.5235987755982988 );	//30degs
 			}else{
 				SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
 				gMap.draw2DMap( screenSurf , player.x, player.y );
@@ -220,7 +221,7 @@ inline double modPI( double ang ){
 		return ang;
 }
 
-void sprite3D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread){
+void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread){
 	
 	//axes are normal cartesian coordinates, have to flip y axis
 	double diffX = (x - player->x);
@@ -234,7 +235,10 @@ void sprite3D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *playe
 	
 	/*The first mod2PI brings the difference back to the original modulo 2pi
 	The second modPI brings the diff in the range (-pi, pi)*/
-	double ang_diff = modPI( mod2PI( real_atan( diffX, diffY ) - player->ang ) );
+	
+	double sprite_ang = real_atan( diffX, diffY );
+	
+	double ang_diff = modPI( mod2PI( sprite_ang - player->ang ) );
 	
 	//angular size of sprite
 	double half_ang_sprite_size = std::atan( (double)(spriteSurf->w >> 1) / dist );
@@ -243,10 +247,7 @@ void sprite3D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *playe
 		
 		//horiz position on screen at which sprite is centered
 		//-(ang_diff/spread) because larger angles are placed nearer to the left on the screen
-		double pos = (double)(screenSurf->w >> 1)*( 1.0 - ang_diff/spread );
-		
-		//double start_ang = ang_diff + ang_sprite_size;
-		//double ang_step = 
+		double pos = (double)(screenSurf->w >> 1)*( 1.0 - ang_diff/spread ); 
 		
 		//distance away from the screen
 		double screenDist = (double)screenSurf->w/( 2*std::tan(spread) );
@@ -262,10 +263,45 @@ void sprite3D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *playe
 		sprite_wid = sprite_wid > max_screen_dim ? max_screen_dim : sprite_wid;
 		sprite_hig = sprite_hig > max_screen_dim ? max_screen_dim : sprite_hig;
 		
-		SDL_Rect dstRect;
-		dstRect.x = (int)pos - (sprite_wid >> 1); dstRect.y = (screenSurf->h - sprite_hig) >> 1;
-		dstRect.h = sprite_hig; dstRect.w = sprite_wid;
-		SDL_BlitScaled(spriteSurf, NULL, screenSurf, &dstRect);
+		//angle at which the sprite starts displaying
+		double start_ang = mod2PI( sprite_ang + half_ang_sprite_size );
+		
+		//steps at which rays are casted to check if the sprite is to be clipped by a wall
+		double ang_step = (2.0*half_ang_sprite_size)/(double)sprite_wid;
+		
+		for( int i = 0; i < sprite_wid; i++ ){
+			
+			//only placeholders
+			int mapX, mapY;
+			
+			//angle at which ray is casted, modulo 2pi
+			double rAng = mod2PI(start_ang - i*ang_step);
+			
+			double vDist, hDist, finalDist;
+			
+			cast_horiz_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &hDist);
+			cast_vert_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &vDist);
+			
+			//just like normal ray casting
+			finalDist = vDist > hDist ? hDist : vDist;
+			
+			if( finalDist > dist ){
+				
+				SDL_Rect srcRect;
+				srcRect.x = (int)((double)(spriteSurf->w*i)/(double)sprite_wid);
+				srcRect.y = 0;
+				srcRect.w = ((double)spriteSurf->w/(double)sprite_wid) + 1;
+				srcRect.h = spriteSurf->h;
+				
+				SDL_Rect dstRect;
+				dstRect.x = (int)pos - (sprite_wid >> 1) + i;
+				dstRect.y = (screenSurf->h - sprite_hig) >> 1;
+				dstRect.h = sprite_hig;
+				dstRect.w = 1;
+				
+				SDL_BlitScaled(spriteSurf, &srcRect, screenSurf, &dstRect);
+			}
+		}
 	}
 }
 
@@ -276,6 +312,10 @@ void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, d
 	if( keys.count(SDLK_SPACE) != 0 ){
 		speed *= 2;
 		angVel *= 2;
+	}
+	if( keys.count(SDLK_LSHIFT) != 0){
+		speed /= 2;
+		angVel /= 2;
 	}
 	
 	for(int n : keys){
@@ -311,7 +351,7 @@ void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, d
 	player->move(gMap, moveX, moveY, moveAng, true);
 }
 
-bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int *depth, int *mapX, int *mapY, double *dist ){
+bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int depth, int *mapX, int *mapY, double *dist ){
 	double tanAng = std::tan(rAng);
 	int dof = 0;
 	double rayX, rayY, xOffs, yOffs;
@@ -339,12 +379,12 @@ bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int *
 		//as it will never meet a horizontal wall
 		rayX = posX;
 		rayY = posY;
-		dof = *depth;
+		dof = depth;
 	}
 	
 	
 	//casting until depth of field is reached
-	while( dof < *depth ){
+	while( dof < depth ){
 		//extracting the map indices from ray positions
 		*mapX = (int)(rayX) >> TILESHIFT;
 		*mapY = (int)(rayY) >> TILESHIFT;
@@ -362,10 +402,10 @@ bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int *
 	
 	*dist = std::hypot(posX - rayX, posY - rayY);
 	
-	return dof == *depth;
+	return dof == depth;
 }
 
-bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int *depth, int *mapX, int *mapY, double *dist ){
+bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int depth, int *mapX, int *mapY, double *dist ){
 	double tanAng = std::tan(rAng);
 	int dof = 0;
 	double rayX, rayY, xOffs, yOffs;
@@ -391,11 +431,11 @@ bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int *d
 		//as it will never meet a vertical wall
 		rayX = posX;
 		rayY = posY;
-		dof = *depth;
+		dof = depth;
 	}
 		
 	//casting until depth of field is reached
-	while( dof < *depth ){
+	while( dof < depth ){
 		//extracting the map indices from ray positions
 		*mapX = (int)(rayX) >> TILESHIFT;
 		*mapY = (int)(rayY) >> TILESHIFT;
@@ -413,7 +453,7 @@ bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int *d
 	
 	*dist = std::hypot(posX - rayX, posY - rayY);
 	
-	return dof == *depth;
+	return dof == depth;
 }
 
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio){
@@ -433,8 +473,6 @@ void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int ang
 	//the height of the slice of the wall where the ray hits
 	int rayHig;
 	
-	//variables used purely for ray casting
-	double hRayX, hRayY, vRayX, vRayY, h_xOffs, h_yOffs, v_xOffs, v_yOffs;
 	//map indices where the ray hits the wall
 	int vmapX, vmapY, hmapX, hmapY;
 	
@@ -445,113 +483,13 @@ void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int ang
 	
 	for( int i = 0; i < rayCount; i++ ){
 	
-		double rAng = rayAng;
-		//calculating ray modulo 2pi
-		if( rAng > 2*PI )
-			rAng -= 2*PI;
-		if( rAng < 0 )
-			rAng += 2*PI;
-		
-		/*double tanAng = std::tan(rAng);
-		int dof = 0;
-		
-		//first, checking for horizontal wall collisions            
-		if ( rAng > PI ){	//looking down
-			
-			//projecting the ray onto the vertical grid line
-			hRayY = (double)( ( ( (int)(player->y) >> TILESHIFT ) << TILESHIFT ) + BLOCK_DIM );
-			//calculating the point of intersection with nearest horiz. wall
-			hRayX = player->x - (hRayY - player->y)/tanAng;
-			
-			//calculating the offsets for further ray casting
-			h_yOffs = (double)BLOCK_DIM;
-			h_xOffs = -h_yOffs/tanAng;
-			
-		}else if ( rAng < PI and rAng > 0 ){ //looking up
-			hRayY = (double)( ( (int)(player->y) >> TILESHIFT ) << TILESHIFT );
-			hRayX = player->x + (player->y - hRayY)/tanAng;
-			h_yOffs = -(double)BLOCK_DIM;
-			h_xOffs = -h_yOffs/tanAng;
-			
-		}else{
-			//if the ray is perfectly left or right, dont' cast it,
-			//as it will never meet a horizontal wall
-			hRayX = player->x;
-			hRayY = player->y;
-			dof = depth;
-		}
-		
-		
-		//casting until depth of field is reached
-		while( dof < depth ){
-			//extracting the map indices from ray positions
-			hmapX = (int)(hRayX) >> TILESHIFT;
-			hmapY = (int)(hRayY) >> TILESHIFT;
-			
-			//if the ray hit a horiz. wall
-			if( gMap->solid_horiz_wall_at( hmapY, hmapX ) )
-				break;
-			//if not, keep going
-			else{
-				hRayX += h_xOffs;
-				hRayY += h_yOffs;
-			}
-			dof++;
-		}*/
+		double rAng = mod2PI(rayAng);
 		
 		double hDist, vDist;
 		
-		cast_horiz_ray( gMap, player->x, player->y, rAng, &depth, &hmapX, &hmapY, &hDist );
-		cast_vert_ray( gMap, player->x, player->y, rAng, &depth, &vmapX, &vmapY, &vDist );
+		cast_horiz_ray( gMap, player->x, player->y, rAng, depth, &hmapX, &hmapY, &hDist );
+		cast_vert_ray( gMap, player->x, player->y, rAng, depth, &vmapX, &vmapY, &vDist );
 		
-		//dof = 0;
-		
-		//then, checking for vertical wall collisions
-		/*if( rAng > PI/2 && rAng < (3*PI)/2 ){   //looking left
-			
-			//projecting the ray onto a horizontal grid line
-			vRayX = (double)( ( (int)player->x >> TILESHIFT ) << TILESHIFT );
-			//calculating the point of intersection with the nearest vert. wall
-			vRayY = player->y + (player->x - vRayX)*tanAng;
-			
-			//calculating the offsets for further ray casting
-			v_xOffs = -(double)BLOCK_DIM;
-			v_yOffs = -v_xOffs*tanAng;
-			
-		}else if( rAng > (3*PI)/2 || rAng < PI*2 ){  //looking right
-			vRayX = (double)( ( ( (int)player->x >> TILESHIFT ) << TILESHIFT ) + BLOCK_DIM );
-			vRayY = player->y - (vRayX - player->x)*tanAng;
-			v_xOffs = (double)BLOCK_DIM;
-			v_yOffs = -v_xOffs*tanAng;
-		}else{
-			//if the ray is perfectly up or down, don't cast it,
-			//as it will never meet a vertical wall
-			vRayX = player->x;
-			vRayY = player->y;
-			dof = depth;
-		}
-			
-		//casting until depth of field is reached
-		while( dof < depth ){
-			//extracting the map indices from ray positions
-			vmapX = (int)(vRayX) >> TILESHIFT;
-			vmapY = (int)(vRayY) >> TILESHIFT;
-			
-			//if the ray hit a vert. wall
-			if( gMap->solid_vert_wall_at( vmapY, vmapX ) )
-				break;
-			//if not, keep going
-			else{
-				vRayX += v_xOffs;
-				vRayY += v_yOffs;
-			}
-			dof++;
-		}*/
-		
-		//double vDist = std::fabs((player->x - vRayX)/std::cos(rAng));
-		//double hDist = std::fabs((player->x - hRayX)/std::cos(rAng));
-		//double vDist = std::hypot(player->x - vRayX, player->y - vRayY);
-		//double hDist = std::hypot(player->x - hRayX, player->y - hRayY);
 		//which among the two is smallest
 		double finalDist;
 		//color of wall which the ray hit
