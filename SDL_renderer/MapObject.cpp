@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <cmath>
 #include "MapObject.h"
-#include "GameMap.h"
 
 #define PI 3.1415926535897932384
 
 const unsigned TILESHIFT = 6;
+const int DEPTH_OF_FIELD = 20;
 
 MapObject::MapObject(double x_, double y_, double ang_, int objDim_){
 	x = x_; y = y_;
@@ -54,11 +54,7 @@ void MapObject::draw2DMap(SDL_Surface *screenSurf){
 
 void MapObject::move(GameMap *gMap, double dx, double dy, double dang, bool rotate){
 	
-	ang += dang;
-	if( ang > 2*PI )	//angle is modulo 2pi
-		ang -= 2*PI;
-	else if( ang < 0 )
-		ang += 2*PI;
+	ang = mod2PI( ang + dang );
 	
 	double moveX = dx;
 	double moveY = dy;
@@ -113,21 +109,145 @@ bool MapObject::tryMove(GameMap *gMap){
 	return true;
 }
 
-/*void Agent::reset(){
+//##########################################AGENT##############################################################
+
+//main constructor
+Agent::Agent(SDL_Surface *surf, double posX, double posY, double ang_){
+	spriteSurf = surf;
+	x = posX; y = posY; ang = ang_;
+	this->reset();
+	
+	//hardcoded to always follow player
+	follow_player_flag = true;
+}
+
+//agents only forgets that it has seen player
+void Agent::reset(){
 	has_seen = false;
 }
 
-bool Agent::check_for_player(MapObject *player){
+//agent forgets that it has seen player, and also stops following
+void Agent::reset_to_idle(){
+	this->reset();
+	follow_player_flag = false;
+}
+
+bool Agent::check_for_player(MapObject *player, int tile_radius){
+	
 	if( has_seen ) return true;
-	int diffX = (int)(x - player.x) >> TILESHIFT;
-	int diffY = (int)(y - player.y) >> TILESHIFT;
-	if( std::hypot(diffX, diffY) < 10 )
-		has_seen = true;
+	
+	int diffX = (int)(x - player->x) >> TILESHIFT;
+	int diffY = (int)(y - player->y) >> TILESHIFT;
+	
+	has_seen = std::hypot(diffX, diffY) < tile_radius;
+	
 	return has_seen;
 }
 
-Agent::follow_player(MapObject *player){
-	if( check_player( player ) ){
-		
+void Agent::follow_player(GameMap *gMap, MapObject *player, int tile_radius, double speed, double angVel, double dt){
+	if( follow_player_flag ){
+		if( check_for_player( player, tile_radius ) ){
+			
+			double moveX, moveY, movAng;
+			moveX = moveY = movAng = 0.0;
+			
+			//this finds the angle between the player and the agent
+			double diffX = player->x - this->x;
+			double diffY = -(player->y - this->y);
+			double ang_diff = modPI( mod2PI( real_atan( diffX, diffY ) - this->ang ) );
+			
+			if( ang_diff > 0 )
+				movAng += angVel*dt;
+			else
+				movAng -= angVel*dt;
+			
+			moveX += std::cos(this->ang)*speed*dt;
+			moveY -= std::sin(this->ang)*speed*dt;
+			
+			this->move( gMap, moveX, moveY, movAng, false);
+		}
 	}
-}*/
+}
+
+void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread){
+	
+	//axes are normal cartesian coordinates, have to flip y axis
+	double diffX = (this->x - player->x);
+	double diffY = -(this->y - player->y);
+	
+	double dist = std::hypot( diffX , diffY );
+	
+	//dont do anything if the sprite is very far away
+	if( ((int)dist >> TILESHIFT) > DEPTH_OF_FIELD )
+		return;
+	
+	double sprite_ang = real_atan( diffX, diffY );
+	
+	//The first mod2PI brings the difference back to the original modulo 2pi
+	//The second modPI brings the diff in the range (-pi, pi)
+	double ang_diff = modPI( mod2PI( sprite_ang - player->ang ) );
+	
+	//angular size of sprite
+	double half_ang_sprite_size = std::atan( (double)(spriteSurf->w >> 1) / dist );
+	
+	if( std::fabs(ang_diff) - std::fabs(half_ang_sprite_size) < spread ){
+		
+		//horiz position on screen at which sprite is centered
+		//-(ang_diff/spread) because larger angles are placed nearer to the left on the screen
+		double pos = (double)(screenSurf->w >> 1)*( 1.0 - ang_diff/spread ); 
+		
+		//distance away from the screen
+		double screenDist = (double)screenSurf->w/( 2*std::tan(spread) );
+		
+		//dimensions of the sprite
+		int sprite_wid = (int)(spriteSurf->w*screenDist/dist);
+		int sprite_hig = (int)(spriteSurf->h*screenDist/dist);
+		
+		//the maximum screen dimension
+		int max_screen_dim = screenSurf->w > screenSurf->h ? screenSurf->w : screenSurf->h;
+		
+		//capping the sprite dims to the max screen dim
+		sprite_wid = sprite_wid > max_screen_dim ? max_screen_dim : sprite_wid;
+		sprite_hig = sprite_hig > max_screen_dim ? max_screen_dim : sprite_hig;
+		
+		//angle at which the sprite starts displaying
+		double start_ang = mod2PI( sprite_ang + half_ang_sprite_size );
+		
+		//steps at which rays are casted to check if the sprite is to be clipped by a wall
+		double ang_step = (2.0*half_ang_sprite_size)/(double)sprite_wid;
+		
+		for( int i = 0; i < sprite_wid; i++ ){
+			
+			//only placeholders
+			int mapX, mapY;
+			
+			//angle at which ray is casted, modulo 2pi
+			double rAng = mod2PI(start_ang - i*ang_step);
+			
+			double vDist, hDist, finalDist;
+			
+			cast_horiz_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &hDist);
+			cast_vert_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &vDist);
+			
+			//just like normal ray casting
+			finalDist = vDist > hDist ? hDist : vDist;
+			
+			if( finalDist > dist ){
+				
+				SDL_Rect srcRect;
+				srcRect.x = (int)((double)(spriteSurf->w*i)/(double)sprite_wid);
+				srcRect.y = 0;
+				srcRect.w = ((double)spriteSurf->w/(double)sprite_wid) + 1;
+				srcRect.h = spriteSurf->h;
+				
+				SDL_Rect dstRect;
+				dstRect.x = (int)pos - (sprite_wid >> 1) + i;
+				dstRect.y = (screenSurf->h - sprite_hig) >> 1;
+				dstRect.h = sprite_hig;
+				dstRect.w = 1;
+				
+				SDL_BlitScaled(spriteSurf, &srcRect, screenSurf, &dstRect);
+			}
+		}
+	}
+}
