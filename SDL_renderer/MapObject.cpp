@@ -5,6 +5,7 @@
 #define PI 3.1415926535897932384
 
 const unsigned TILESHIFT = 6;
+const unsigned BLOCK_DIM = 64;
 const int DEPTH_OF_FIELD = 20;
 
 MapObject::MapObject(double x_, double y_, double ang_, int objDim_){
@@ -41,8 +42,8 @@ void MapObject::draw(SDL_Surface *screenSurf){
 //draws at the center of the screen
 void MapObject::draw2DMap(SDL_Surface *screenSurf){
 	SDL_Rect playRect;
-	playRect.x = ( screenSurf->w - objDim ) >> 1;
-	playRect.y = ( screenSurf->h - objDim ) >> 1;
+	playRect.x = ( ( screenSurf->w ) >> 1 ) - ( objDim >> 2 ) ;
+	playRect.y = ( ( screenSurf->h ) >> 1 ) - ( objDim >> 2 );
 	playRect.w = objDim >> 1; playRect.h = objDim >> 1;
 	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 255, 0 ) );
 	
@@ -52,7 +53,7 @@ void MapObject::draw2DMap(SDL_Surface *screenSurf){
 	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
 }
 
-void MapObject::move(GameMap *gMap, double dx, double dy, double dang, bool rotate){
+int MapObject::move(GameMap *gMap, MapObject **agent_arr, int agent_cnt, double dx, double dy, double dang, bool rotate){
 	
 	ang = mod2PI( ang + dang );
 	
@@ -66,43 +67,73 @@ void MapObject::move(GameMap *gMap, double dx, double dy, double dang, bool rota
 	}
 	
 	if( moveX == 0.0 && moveY == 0.0 )
-		return;
+		return -1;	//no motion, no clipping
 	
 	x += moveX; y += moveY;
 	
-	if( tryMove(gMap) )
-		return;
+	if( tryMove(gMap, agent_arr, agent_cnt) )
+		return 0;	//no clipping
 	
 	//clipping x direction movement
 	x -= moveX;
 	
-	if( tryMove(gMap) )
-		return;
+	if( tryMove(gMap, agent_arr, agent_cnt) )
+		return 1;	//clipping in x direction
 	
 	//clipping y direction movement
 	x += moveX;
 	y -= moveY;
 	
-	if( tryMove(gMap) )
-		return;
+	if( tryMove(gMap, agent_arr, agent_cnt) )
+		return 2;	//clipping in y direction
 	
 	//clipping full movement if nothing works
 	x -= moveX;
 	
-	return;
+	return 3;	//full clipping
 }
 
-bool MapObject::tryMove(GameMap *gMap){
+bool MapObject::tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt){
 	int xl, xh, yl, yh;
-	xl = ((int)x - (objDim >> 1)) >> TILESHIFT;
-	xh = ((int)x + (objDim >> 1)) >> TILESHIFT;
-	yl = ((int)y - (objDim >> 1)) >> TILESHIFT;
-	yh = ((int)y + (objDim >> 1)) >> TILESHIFT;
+	xl = ((int)this->x - (this->objDim >> 1)) >> TILESHIFT;
+	xh = ((int)this->x + (this->objDim >> 1)) >> TILESHIFT;
+	yl = ((int)this->y - (this->objDim >> 1)) >> TILESHIFT;
+	yh = ((int)this->y + (this->objDim >> 1)) >> TILESHIFT;
 	
 	for( int y_ = yl; y_ <= yh; y_++ ){
 		for( int x_ = xl; x_ <= xh; x_++ ){
 			if( gMap->solid_block_at( y_, x_ ) )	// that gMap function also does out of bounds checking
 				return false;
+		}
+	}
+	
+	//don't check player collisions with other objects on the map
+	if( this == agent_arr[0] )
+		return true;
+	
+	double bxl, bxh, byl, byh;	//bounds of the agent
+	bxl = this->x - (this->objDim >> 1);
+	bxh = this->x + (this->objDim >> 1);
+	byl = this->y - (this->objDim >> 1);
+	byh = this->y + (this->objDim >> 1);
+	
+	for( int a = 0; a < agent_cnt; a++ ){	//starts from 1 as 0 is player
+		
+		if( this == agent_arr[a] )
+			continue;
+		
+		double axl, axh, ayl, ayh;
+		axl = agent_arr[a]->x - (agent_arr[a]->objDim >> 1);
+		axh = agent_arr[a]->x + (agent_arr[a]->objDim >> 1);
+		ayl = agent_arr[a]->y - (agent_arr[a]->objDim >> 1);
+		ayh = agent_arr[a]->y + (agent_arr[a]->objDim >> 1);
+		
+		for( double i = bxl; i < bxh; i += 1.0 ){
+			for( double j = byl; j < byh; j += 1.0 ){
+				//if object's's rect is intersecting another object's rect
+				if( axl < i and i < axh  and  ayl < j and j < ayh )
+					return false;
+			}
 		}
 	}
 	
@@ -112,8 +143,9 @@ bool MapObject::tryMove(GameMap *gMap){
 //##########################################AGENT##############################################################
 
 //main constructor
-Agent::Agent(SDL_Surface *surf, double posX, double posY, double ang_){
+Agent::Agent(SDL_Surface *surf, double posX, double posY, double ang_, int objDim_){
 	spriteSurf = surf;
+	objDim = objDim_;
 	x = posX; y = posY; ang = ang_;
 	this->reset();
 	
@@ -144,16 +176,18 @@ bool Agent::check_for_player(MapObject *player, int tile_radius){
 	return has_seen;
 }
 
-void Agent::follow_player(GameMap *gMap, MapObject *player, int tile_radius, double speed, double angVel, double dt){
+void Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
+						int tile_radius, double speed, double angVel, double dt){
 	if( follow_player_flag ){
-		if( check_for_player( player, tile_radius ) ){
+		if( check_for_player( agent_arr[0], tile_radius ) ){
 			
 			double moveX, moveY, movAng;
 			moveX = moveY = movAng = 0.0;
 			
 			//this finds the angle between the player and the agent
-			double diffX = player->x - this->x;
-			double diffY = -(player->y - this->y);
+			//agent_arr[0] is the player
+			double diffX = agent_arr[0]->x - this->x;
+			double diffY = -(agent_arr[0]->y - this->y);
 			double ang_diff = modPI( mod2PI( real_atan( diffX, diffY ) - this->ang ) );
 			
 			if( ang_diff > 0 )
@@ -164,7 +198,45 @@ void Agent::follow_player(GameMap *gMap, MapObject *player, int tile_radius, dou
 			moveX += std::cos(this->ang)*speed*dt;
 			moveY -= std::sin(this->ang)*speed*dt;
 			
-			this->move( gMap, moveX, moveY, movAng, false);
+			int clip = this->move( gMap, agent_arr, agent_cnt, moveX, moveY, movAng, false);
+			
+			//to compensate for 
+			if( clip > 0 ){
+				if( clip == 1 ){	//x got clipped
+					
+					//undoing y motion
+					this->y -= moveY;
+					
+					//defining new motion along the wall
+					if( this->ang < PI )	//facing upward
+						moveY = -speed*dt;
+					else					//facing downward
+						moveY = speed*dt;
+					
+					moveX = 0.0;
+					
+					this->move( gMap, agent_arr, agent_cnt, moveX, moveY, 0.0, false);
+					
+				}else if( clip == 2 ){	//y got clipped
+					
+					//undoing x motion
+					this->x -= moveX;
+					
+					//defining new motion along wall
+					if( this->ang > PI/2 && this->ang < (3*PI)/2 ) //facing left
+						moveX = -speed*dt;
+					else										//facing right
+						moveX = speed*dt;
+					
+					moveY = 0.0;
+					
+					this->move( gMap, agent_arr, agent_cnt, moveX, moveY, 0.0, false);
+					
+				}else{
+					//if it encounters an inescapable space, it just resets
+					this->reset();
+				}
+			}
 		}
 	}
 }
@@ -250,4 +322,16 @@ void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, 
 			}
 		}
 	}
+}
+
+void Agent::sprite2D(SDL_Surface *screenSurf, MapObject *player){
+	SDL_Rect aRect;
+	int screen_x = ( screenSurf->w >> 1 ) + ( (int)( (this->x - player->x) ) >> 1 );
+	int screen_y = ( screenSurf->h >> 1 ) + ( (int)( (this->y - player->y) ) >> 1 );
+	aRect.x = screen_x - ( this->objDim >> 2 );
+	aRect.y = screen_y - ( this->objDim >> 2 );
+	aRect.w = this->objDim >> 1;
+	aRect.h = this->objDim >> 1;
+	
+	SDL_BlitScaled( this->spriteSurf, NULL, screenSurf, &aRect );
 }

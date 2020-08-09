@@ -210,6 +210,7 @@ void GameMap::drawFullMap(SDL_Surface* mapSurf){
 	}
 }
 
+//center the display at posX, posY
 void GameMap::draw2DMap(SDL_Surface *screenSurf, int posX, int posY){
 	
 	int mapX = posX >> TILESHIFT;

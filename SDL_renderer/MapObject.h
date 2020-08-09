@@ -15,9 +15,10 @@
 			
 			void update(double x_, double y_, double ang_, int objDim_);
 			
-			void move(GameMap *gMap, double dx, double dy, double dang, bool rotate);
+			int move(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
+						double dx, double dy, double dang, bool rotate);
 			
-			bool tryMove(GameMap *gMap);
+			bool tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt);
 			
 			//draws at original x,y position on the screen
 			void draw(SDL_Surface *screenSurf);
@@ -36,12 +37,14 @@
 			bool check_for_player(MapObject *player, int tile_radius);
 			
 		public:
-			Agent(SDL_Surface *surf, double posX, double posY, double ang_);
-			void follow_player(GameMap *gmap, MapObject *player, int tile_radius, double speed, double angVel, double dt);
+			Agent(SDL_Surface *surf, double posX, double posY, double ang_, int objDim_);
+			void follow_player(GameMap *gmap, MapObject **agent_arr, int agent_cnt, 
+								int tile_radius, double speed, double angVel, double dt);
 			void reset();
 			void reset_to_idle();
 			
 			void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread);
+			void sprite2D(SDL_Surface *screenSurf, MapObject *player);
 	};
 	
 #endif

@@ -22,7 +22,8 @@ SDL_Window *window = NULL;
 SDL_Surface *screenSurf = NULL;
 
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
-void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, double angVel, double dt);
+void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
+			std::set<int> keys, double speed, double angVel, double dt);
 void sprite2D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player);
 void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread);
 
@@ -73,7 +74,12 @@ int main( int argc, char* args[] ){
 	//initializing the player
 	//gMap.initPlayer(80, 80, (7*PI)/2, 10);
 	MapObject player(80.0, 80.0, (7*PI)/2, 10);
-	Agent enemy( spriteSurf, 256.0, 256.0, 0.0 );
+	Agent enemy( spriteSurf, 256.0, 256.0, 0.0, 10 );
+	
+	int agent_cnt = 2;
+	MapObject **agent_arr = new MapObject*[agent_cnt];
+	agent_arr[0] = &player;
+	agent_arr[1] = &enemy;
 	
 	//init SDL
 	if( !init_SDL() ){
@@ -155,7 +161,8 @@ int main( int argc, char* args[] ){
 			oldTime = newTime;
 			
 			//move player according to the keys pressed
-			input( &gMap, &player, keys, 240, 1.5, dt );
+			input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt );
+			enemy.follow_player( &gMap, agent_arr, agent_cnt, 10, 100, 1.5, dt );
 			
 			//display map onto the screen
 			//SDL_BlitSurface( mapSurf, NULL, screenSurf, NULL );
@@ -168,13 +175,13 @@ int main( int argc, char* args[] ){
 				SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
 				
 				castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD, 0.75 );
-				enemy.follow_player( &gMap, &player, 10, 100, 1.5, dt );
 				enemy.sprite3D( &gMap, screenSurf, &player, 0.5235987755982988);
 				//sprite3D( &gMap, screenSurf, spriteSurf, &player, 256, 256, 0.5235987755982988 );	//30degs
 			}else{
 				SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
 				gMap.draw2DMap( screenSurf , player.x, player.y );
 				player.draw2DMap( screenSurf );
+				enemy.sprite2D( screenSurf, &player );
 			}
 			
 			//update the window
@@ -190,91 +197,8 @@ int main( int argc, char* args[] ){
 	return 0;
 }
 
-/*void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread){
-	
-	//axes are normal cartesian coordinates, have to flip y axis
-	double diffX = (x - player->x);
-	double diffY = -(y - player->y);
-	
-	double dist = std::hypot( diffX , diffY );
-	
-	//dont do anything if the sprite is very far away
-	if( ((int)dist >> TILESHIFT) > DEPTH_OF_FIELD )
-		return;
-	
-	//The first mod2PI brings the difference back to the original modulo 2pi
-	//The second modPI brings the diff in the range (-pi, pi)
-	
-	double sprite_ang = real_atan( diffX, diffY );
-	
-	double ang_diff = modPI( mod2PI( sprite_ang - player->ang ) );
-	
-	//angular size of sprite
-	double half_ang_sprite_size = std::atan( (double)(spriteSurf->w >> 1) / dist );
-	
-	if( std::fabs(ang_diff) - std::fabs(half_ang_sprite_size) < spread ){
-		
-		//horiz position on screen at which sprite is centered
-		//-(ang_diff/spread) because larger angles are placed nearer to the left on the screen
-		double pos = (double)(screenSurf->w >> 1)*( 1.0 - ang_diff/spread ); 
-		
-		//distance away from the screen
-		double screenDist = (double)screenSurf->w/( 2*std::tan(spread) );
-		
-		//dimensions of the sprite
-		int sprite_wid = (int)(spriteSurf->w*screenDist/dist);
-		int sprite_hig = (int)(spriteSurf->h*screenDist/dist);
-		
-		//the maximum screen dimension
-		int max_screen_dim = screenSurf->w > screenSurf->h ? screenSurf->w : screenSurf->h;
-		
-		//capping the sprite dims to the max screen dim
-		sprite_wid = sprite_wid > max_screen_dim ? max_screen_dim : sprite_wid;
-		sprite_hig = sprite_hig > max_screen_dim ? max_screen_dim : sprite_hig;
-		
-		//angle at which the sprite starts displaying
-		double start_ang = mod2PI( sprite_ang + half_ang_sprite_size );
-		
-		//steps at which rays are casted to check if the sprite is to be clipped by a wall
-		double ang_step = (2.0*half_ang_sprite_size)/(double)sprite_wid;
-		
-		for( int i = 0; i < sprite_wid; i++ ){
-			
-			//only placeholders
-			int mapX, mapY;
-			
-			//angle at which ray is casted, modulo 2pi
-			double rAng = mod2PI(start_ang - i*ang_step);
-			
-			double vDist, hDist, finalDist;
-			
-			cast_horiz_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &hDist);
-			cast_vert_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &vDist);
-			
-			//just like normal ray casting
-			finalDist = vDist > hDist ? hDist : vDist;
-			
-			if( finalDist > dist ){
-				
-				SDL_Rect srcRect;
-				srcRect.x = (int)((double)(spriteSurf->w*i)/(double)sprite_wid);
-				srcRect.y = 0;
-				srcRect.w = ((double)spriteSurf->w/(double)sprite_wid) + 1;
-				srcRect.h = spriteSurf->h;
-				
-				SDL_Rect dstRect;
-				dstRect.x = (int)pos - (sprite_wid >> 1) + i;
-				dstRect.y = (screenSurf->h - sprite_hig) >> 1;
-				dstRect.h = sprite_hig;
-				dstRect.w = 1;
-				
-				SDL_BlitScaled(spriteSurf, &srcRect, screenSurf, &dstRect);
-			}
-		}
-	}
-}*/
-
-void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, double angVel, double dt){
+void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
+			std::set<int> keys, double speed, double angVel, double dt){
 	double moveX, moveY, moveAng;
 	moveX = moveY = moveAng = 0.0;
 	
@@ -317,7 +241,7 @@ void input(GameMap *gMap, MapObject *player, std::set<int> keys, double speed, d
 		}
 	}
 	
-	player->move(gMap, moveX, moveY, moveAng, true);
+	player->move(gMap, agent_arr, agent_cnt, moveX, moveY, moveAng, true);
 }
 
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio){
