@@ -176,7 +176,7 @@ bool Agent::check_for_player(MapObject *player, int tile_radius){
 	return has_seen;
 }
 
-void Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
+bool Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 						int tile_radius, double speed, double angVel, double dt){
 	if( follow_player_flag ){
 		if( check_for_player( agent_arr[0], tile_radius ) ){
@@ -188,6 +188,11 @@ void Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 			//agent_arr[0] is the player
 			double diffX = agent_arr[0]->x - this->x;
 			double diffY = -(agent_arr[0]->y - this->y);
+			
+			double dist = std::hypot( diffX, diffY );
+			if( dist < this->objDim + agent_arr[0]->objDim )
+				return true;
+			
 			double ang_diff = modPI( mod2PI( real_atan( diffX, diffY ) - this->ang ) );
 			
 			if( ang_diff > 0 )
@@ -200,7 +205,7 @@ void Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 			
 			int clip = this->move( gMap, agent_arr, agent_cnt, moveX, moveY, movAng, false);
 			
-			//to compensate for 
+			//to compensate for collisions with wall
 			if( clip > 0 ){
 				if( clip == 1 ){	//x got clipped
 					
@@ -239,6 +244,7 @@ void Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 			}
 		}
 	}
+	return false;
 }
 
 void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread){
@@ -332,6 +338,10 @@ void Agent::sprite2D(SDL_Surface *screenSurf, MapObject *player){
 	aRect.y = screen_y - ( this->objDim >> 2 );
 	aRect.w = this->objDim >> 1;
 	aRect.h = this->objDim >> 1;
+	
+	//if rectangle out of bounds;
+	if( aRect.x + aRect.w < 0 or aRect.y + aRect.h < 0 or aRect.x > screenSurf->w or aRect.y > screenSurf->h )
+		return;
 	
 	SDL_BlitScaled( this->spriteSurf, NULL, screenSurf, &aRect );
 }

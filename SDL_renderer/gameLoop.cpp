@@ -21,6 +21,8 @@ SDL_Window *window = NULL;
 //the surface of the main screen
 SDL_Surface *screenSurf = NULL;
 
+//SDL_Renderer* renderer = NULL;
+
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
 void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
 			std::set<int> keys, double speed, double angVel, double dt);
@@ -42,9 +44,13 @@ bool init_SDL(){
 			printf( "Window couldnt be created. SDL error: %s\n", SDL_GetError() );
 			return false;
 		}else{
-			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			//SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			
+			//renderer = SDL_CreateRenderer ( window, -1, SDL_RENDERER_ACCELERATED );
 			//getting the window surface
 			screenSurf = SDL_GetWindowSurface( window );
+			
+			//renderer = SDL_GetRenderer( window );
 		}
 	}
 	return true;
@@ -92,8 +98,11 @@ int main( int argc, char* args[] ){
 		printf("Press escape to exit\n");
 		printf("Press Enter to continue\n");*/
 		
+		//SDL_Surface *screen = SDL_CreateRGBSurface(0, screenSurf->w, screenSurf->h, 24, 0,0,0,0);
+		
 		//to run the game loop
 		bool running = true;
+		bool game_over = false;
 		
 		bool show3D = true;
 		
@@ -161,27 +170,28 @@ int main( int argc, char* args[] ){
 			oldTime = newTime;
 			
 			//move player according to the keys pressed
-			input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt );
-			enemy.follow_player( &gMap, agent_arr, agent_cnt, 10, 100, 1.5, dt );
+			if( !game_over )
+				input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt );
 			
-			//display map onto the screen
-			//SDL_BlitSurface( mapSurf, NULL, screenSurf, NULL );
+			game_over = enemy.follow_player( &gMap, agent_arr, agent_cnt, 10, 100, 1.5, dt );
 			
-			//draw player on the screen
-			//gMap.drawPlayer(screenSurf);
-			
-			if( show3D ){
-				SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
-				SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
-				
-				castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD, 0.75 );
-				enemy.sprite3D( &gMap, screenSurf, &player, 0.5235987755982988);
-				//sprite3D( &gMap, screenSurf, spriteSurf, &player, 256, 256, 0.5235987755982988 );	//30degs
+			if( game_over ){
+				SDL_FillRect( screenSurf, NULL, SDL_MapRGB(screenSurf->format, 255, 0, 0));
 			}else{
-				SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
-				gMap.draw2DMap( screenSurf , player.x, player.y );
-				player.draw2DMap( screenSurf );
-				enemy.sprite2D( screenSurf, &player );
+			
+				if( show3D ){
+					
+					SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
+					SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
+					
+					castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD, 0.75 );
+					enemy.sprite3D( &gMap, screenSurf, &player, 0.5235987755982988);
+				}else{
+					SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
+					gMap.draw2DMap( screenSurf , player.x, player.y );
+					player.draw2DMap( screenSurf );
+					enemy.sprite2D( screenSurf, &player );
+				}
 			}
 			
 			//update the window

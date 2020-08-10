@@ -38,7 +38,7 @@
 			
 		public:
 			Agent(SDL_Surface *surf, double posX, double posY, double ang_, int objDim_);
-			void follow_player(GameMap *gmap, MapObject **agent_arr, int agent_cnt, 
+			bool follow_player(GameMap *gmap, MapObject **agent_arr, int agent_cnt, 
 								int tile_radius, double speed, double angVel, double dt);
 			void reset();
 			void reset_to_idle();
