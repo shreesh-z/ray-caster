@@ -29,7 +29,7 @@ class GameMap{
 		
 		//creates the game map by importing a bitmap file
 		//uses SDL's internal mechanisms to read the bitmap file and create the map array
-		GameMap(const char *imgPath, SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio);
+		GameMap(SDL_Surface *mapImg, SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio);
 		//~GameMap();
 		
 		//prints the map to the console

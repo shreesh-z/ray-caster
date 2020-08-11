@@ -9,12 +9,12 @@
 
 //creates the game map by importing a bitmap file
 //uses SDL's internal mechanisms to read the bitmap file and create the map array
-GameMap::GameMap(const char *imgPath, SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio){
+GameMap::GameMap(SDL_Surface *mapImg, SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio){
 	
 	//default is 16, can't be changed as of now
 	mapZoom = 16;
 	//The surface of the image
-	SDL_Surface *mapImg = SDL_LoadBMP( imgPath );
+	//SDL_Surface *mapImg = SDL_LoadBMP( imgPath );
 	
 	//If an error occurs
 	if( mapImg == NULL ){
@@ -84,6 +84,10 @@ GameMap::GameMap(const char *imgPath, SDL_Surface *wall_textures, SDL_Surface *d
 			
 			}else{
 				
+				if( colors[0] == 0 and colors[1] == 255 and colors[2] == 1 ){
+					colors[0] = colors[1] = colors[2] = 0;
+				}
+				
 				//creating a color block
 				newBlock = new ColorBlock( colors[0], colors[1], colors[2], false, wallColorRatio );
 				
@@ -126,8 +130,6 @@ GameMap::GameMap(const char *imgPath, SDL_Surface *wall_textures, SDL_Surface *d
 			}
 		}
 	}
-	
-	SDL_FreeSurface( mapImg );
 }
 
 /*GameMap::~GameMap(){

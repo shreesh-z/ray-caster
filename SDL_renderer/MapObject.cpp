@@ -8,24 +8,18 @@ const unsigned TILESHIFT = 6;
 const unsigned BLOCK_DIM = 64;
 const int DEPTH_OF_FIELD = 20;
 
-MapObject::MapObject(double x_, double y_, double ang_, int objDim_){
-	x = x_; y = y_;
-	ang = ang_;
-	objDim = objDim_;
-}
-MapObject::MapObject() : MapObject::MapObject(0, 0, 0, 10) {}
 
-void MapObject::print(){
+/*void MapObject::print(){
 	printf( "%lf %lf %lf %d \n", x, y, ang, objDim );
-}
+}*/
 
-void MapObject::update(double x_, double y_, double ang_, int objDim_){
+/*void MapObject::update(double x_, double y_, double ang_, int objDim_){
 	x = x_; y = y_;
 	ang = ang_;
 	objDim = objDim_;
-}
+}*/
 
-void MapObject::draw(SDL_Surface *screenSurf){
+/*void MapObject::draw(SDL_Surface *screenSurf){
 	//drawing player square
 	SDL_Rect playRect;
 	playRect.x = x - (objDim >> 1);
@@ -37,21 +31,7 @@ void MapObject::draw(SDL_Surface *screenSurf){
 	playRect.y = y - objDim*std::sin(ang);
 	playRect.w = 5; playRect.h = 5;
 	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
-}
-
-//draws at the center of the screen
-void MapObject::draw2DMap(SDL_Surface *screenSurf){
-	SDL_Rect playRect;
-	playRect.x = ( ( screenSurf->w ) >> 1 ) - ( objDim >> 2 ) ;
-	playRect.y = ( ( screenSurf->h ) >> 1 ) - ( objDim >> 2 );
-	playRect.w = objDim >> 1; playRect.h = objDim >> 1;
-	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 255, 0 ) );
-	
-	playRect.x = (screenSurf->w >> 1) + objDim*std::cos(ang);
-	playRect.y = (screenSurf->h >> 1) - objDim*std::sin(ang);
-	playRect.w = 2; playRect.h = 2;
-	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
-}
+}*/
 
 int MapObject::move(GameMap *gMap, MapObject **agent_arr, int agent_cnt, double dx, double dy, double dang, bool rotate){
 	
@@ -140,6 +120,36 @@ bool MapObject::tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt){
 	return true;
 }
 
+Player::Player(double x_, double y_, double ang_, int objDim_){
+	x = x_; y = y_;
+	ang = ang_;
+	objDim = objDim_;
+}
+Player::Player() : Player::Player(0, 0, 0, 10) {}
+
+//draws at the center of the screen
+void Player::sprite2D(SDL_Surface *screenSurf, MapObject *player){
+	
+	SDL_Rect playRect;
+	playRect.x = ( ( screenSurf->w ) >> 1 ) - ( objDim >> 2 ) ;
+	playRect.y = ( ( screenSurf->h ) >> 1 ) - ( objDim >> 2 );
+	playRect.w = objDim >> 1; playRect.h = objDim >> 1;
+	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 255, 0 ) );
+	
+	playRect.x = (screenSurf->w >> 1) + objDim*std::cos(ang);
+	playRect.y = (screenSurf->h >> 1) - objDim*std::sin(ang);
+	playRect.w = 2; playRect.h = 2;
+	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
+}
+
+bool Player::follow_player(GameMap *gmap, MapObject **agent_arr,
+				int agent_cnt, int tile_radius, double speed, double angVel, double dt){
+	return false;
+}	
+
+void Player::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread){}
+//void MapObject::sprite2D(SDL_Surface *screenSurf, MapObject *player){}
+
 //##########################################AGENT##############################################################
 
 //main constructor
@@ -164,22 +174,41 @@ void Agent::reset_to_idle(){
 	follow_player_flag = false;
 }
 
-bool Agent::check_for_player(MapObject *player, int tile_radius){
+bool Agent::check_for_player(GameMap *gMap, MapObject *player, int tile_radius){
 	
 	if( has_seen ) return true;
 	
 	int diffX = (int)(x - player->x) >> TILESHIFT;
 	int diffY = (int)(y - player->y) >> TILESHIFT;
 	
-	has_seen = std::hypot(diffX, diffY) < tile_radius;
+	double dist = std::hypot(diffX, diffY);
+	
+	if( dist < tile_radius ){
+		double diffX_ = player->x - this->x;
+		double diffY_ = -(player->y - this->y);
+		double rayAng = real_atan( diffX_, diffY_ );
+		
+		double vDist, hDist, finalDist;
+		//placeholders
+		int a, b, c;
+		cast_vert_ray( gMap, this->x, this->y, rayAng, tile_radius, &a, &b, &vDist, &c );
+		cast_horiz_ray( gMap, this->x, this->y, rayAng, tile_radius, &a, &b, &hDist, &c );
+		
+		finalDist = vDist > hDist ? hDist : vDist;
+		
+		double real_dist = std::hypot( diffX_, diffY_ );
+		
+		has_seen = finalDist > real_dist;
+	}
 	
 	return has_seen;
 }
 
 bool Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 						int tile_radius, double speed, double angVel, double dt){
+	
 	if( follow_player_flag ){
-		if( check_for_player( agent_arr[0], tile_radius ) ){
+		if( check_for_player( gMap, agent_arr[0], tile_radius ) ){
 			
 			double moveX, moveY, movAng;
 			moveX = moveY = movAng = 0.0;

@@ -24,7 +24,7 @@ SDL_Surface *screenSurf = NULL;
 //SDL_Renderer* renderer = NULL;
 
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth);
-void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
+bool input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
 			std::set<int> keys, double speed, double angVel, double dt);
 void sprite2D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player);
 void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread);
@@ -95,26 +95,79 @@ int main( int argc, char* args[] ){
 	//change the pixels in the dark texture image
 	create_dark_walls( wall_textures, dark_wall_textures, 0.75 );
 	
+	
+	
+	SDL_Surface *mapImg = SDL_LoadBMP("./Images/levelTrial4.bmp");
+	//SDL_Surface *mapImg = SDL_LoadBMP("./Images/spriteTest.bmp");
+	
+	if( mapImg == NULL ){
+		printf("map img not initialized\n");
+		return 0;
+	}
+	
+	SDL_Surface *spriteSurf = SDL_LoadBMP("./Images/sprite3.bmp");
+	
+	if( spriteSurf == NULL ){
+		printf("sprite not initialized\n");
+		return 0;
+	}
+	
+	
+	
+	Player player(80.0, 80.0, (7*PI)/2, 10);
+	
+	int agent_cnt = 1;
+	
+	SDL_LockSurface(mapImg);
+	Uint8 *pixel = ((Uint8*)mapImg->pixels);
+	SDL_UnlockSurface(mapImg);
+	
+	for( int i = 0; i < mapImg->h; i++ ){
+		for( int j = 0; j < mapImg->w*3; j+=3 ){
+			if( pixel[i*mapImg->pitch + j] == 1 and pixel[i*mapImg->pitch + j + 1] == 255 )
+				agent_cnt += 1;
+		}
+	}
+	
+	MapObject **agent_arr = new MapObject*[agent_cnt];
+	for( int i = 1; i < agent_cnt; i++ ){
+		agent_arr[i] = new Agent( spriteSurf, 0.0, 0.0, (7*PI)/2, 10 );
+	}
+	
+	agent_arr[0] = &player;
+	int agent_index = 1;
+	
+	for( int i = 0; i < mapImg->h; i++ ){
+		for( int j = 0; j < mapImg->w*3; j+=3 ){
+			if( pixel[i*mapImg->pitch + j] == 1 and pixel[i*mapImg->pitch + j + 1] == 255 ){
+				agent_arr[agent_index]->x = (double)( ( (int)(j/3) << TILESHIFT ) + ( BLOCK_DIM >> 1 ));
+				agent_arr[agent_index]->y = (double)( ( i << TILESHIFT ) + ( BLOCK_DIM >> 1 ) );
+				
+				agent_index++;
+				
+				if( agent_index > agent_cnt ){
+					printf("Agent array not initialized\n");
+					return 0;
+				}
+			}
+		}
+	}
+	
+	if( agent_arr == NULL ){
+		printf("Agent array not initialized\n");
+		return 0;
+	}
+	
 	//creating a map object
-	GameMap gMap( "./Images/levelTrial3.bmp", wall_textures, dark_wall_textures, 0.75 );
+	GameMap gMap( mapImg, wall_textures, dark_wall_textures, 0.75 );
 	//GameMap gMap("./Images/spriteTest.bmp");
 	
 	
 	//to get a map image that can be displayed
 	SDL_Surface *mapSurf = SDL_CreateRGBSurface(0, 448, 448, 32, 0, 0, 0, 0);
-	SDL_Surface *spriteSurf = SDL_LoadBMP("./Images/sprite3.bmp");
+	
 		
 	gMap.drawFullMap(mapSurf);
-	
-	//initializing the player
-	//gMap.initPlayer(80, 80, (7*PI)/2, 10);
-	MapObject player(80.0, 80.0, (7*PI)/2, 10);
-	Agent enemy( spriteSurf, 256.0, 256.0, 0.0, 10 );
-	
-	int agent_cnt = 1;
-	MapObject **agent_arr = new MapObject*[agent_cnt];
-	agent_arr[0] = &player;
-	agent_arr[1] = &enemy;
 	
 	//init SDL
 	if( !init_SDL() ){
@@ -127,15 +180,39 @@ int main( int argc, char* args[] ){
 		printf("Press escape to exit\n");
 		printf("Press Enter to continue\n");*/
 		
-		//SDL_Surface *screen = SDL_CreateRGBSurface(0, screenSurf->w, screenSurf->h, 24, 0,0,0,0);
-		
 		//to run the game loop
 		bool running = true;
 		
 		bool show3D = true;
 		
+		bool game_over = false;
+		
+		bool game_won = false;
+		
 		//to access events in the event queue
 		SDL_Event e;
+		
+		SDL_Surface *startScreen = SDL_LoadBMP("./Images/startScreen.bmp");
+		SDL_BlitScaled( startScreen, NULL, screenSurf, NULL );
+		SDL_UpdateWindowSurface( window );
+		SDL_FreeSurface( startScreen );
+		
+		while( running ){
+			while( SDL_PollEvent( &e ) != 0 ){
+				if( e.type == SDL_QUIT ){
+					
+					running = false;
+					return 0;
+				}
+					
+				else if( e.type == SDL_KEYDOWN )
+					
+					if( e.key.keysym.sym == SDLK_RETURN )
+						running = false;
+			}
+		}
+		
+		running = true;
 		
 		//to hold key presses
 		std::set<int> keys = {};
@@ -198,30 +275,79 @@ int main( int argc, char* args[] ){
 			oldTime = newTime;
 			
 			//move player according to the keys pressed
-			input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt );
-			
-			enemy.follow_player( &gMap, agent_arr, agent_cnt, 10, 100, 1.5, dt );
-						
-			if( show3D ){
+			if( !game_over && !game_won ){
 				
-				SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
-				SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
+				if( input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt ) ){
+					game_won = true;
+					break;
+				}
 				
-				castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD );
-				enemy.sprite3D( &gMap, screenSurf, &player, 0.5235987755982988);
+				for( int i = 1; i < agent_cnt; i++ ){
+					if( agent_arr[i]->follow_player( &gMap, agent_arr, agent_cnt, 10, 100, 1.5, dt ) )
+						game_over = true;
+				}
+							
+				if( show3D ){
+					
+					SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
+					SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
+					
+					castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD );
+					
+					for( int i = 0; i < agent_cnt; i++ )
+						agent_arr[i]->sprite3D( &gMap, screenSurf, &player, 0.5235987755982988);
+					
+				}else{
+					SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
+					gMap.draw2DMap( screenSurf , player.x, player.y );
+					//player.draw2DMap( screenSurf );
+					
+					for( int i = 0; i < agent_cnt; i++ )
+						agent_arr[i]->sprite2D( screenSurf, &player );
+				}
 			}else{
-				SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
-				gMap.draw2DMap( screenSurf , player.x, player.y );
-				player.draw2DMap( screenSurf );
-				enemy.sprite2D( screenSurf, &player );
+				running = false;
 			}
 			
 			//update the window
 			SDL_UpdateWindowSurface( window );
 		}
+	
+		if( game_over ){
+			SDL_Surface *gameOverScreen = SDL_LoadBMP("./Images/gameOver.bmp");
+			SDL_BlitScaled( gameOverScreen, NULL, screenSurf, NULL );
+			SDL_UpdateWindowSurface( window );
+			//SDL_FillRect( screenSurf, NULL, SDL_MapRGB(screenSurf->format, 255, 0, 0) );
+			SDL_FreeSurface( gameOverScreen );
+		}else if( game_won ){
+			SDL_Surface *gameWonScreen = SDL_LoadBMP("./Images/gameWon.bmp");
+			SDL_BlitScaled( gameWonScreen, NULL, screenSurf, NULL );
+			SDL_UpdateWindowSurface( window );
+		}else{
+			SDL_Surface *gameExit = SDL_LoadBMP("./Images/gameExit.bmp");
+			SDL_BlitScaled( gameExit, NULL, screenSurf, NULL );
+			SDL_UpdateWindowSurface( window );
+		}
+		
+		running = true;
+		
+		while( running ){
+			
+			while( SDL_PollEvent( &e ) != 0 ){
+				if( e.type == SDL_QUIT )
+					
+					running = false;
+					
+				else if( e.type == SDL_KEYDOWN )
+					
+					if( e.key.keysym.sym == SDLK_ESCAPE )
+						running = false;
+			}
+		}
 	}
 	
 	//wrapping up everything
+	SDL_FreeSurface( mapImg );
 	SDL_FreeSurface(mapSurf);
 	SDL_FreeSurface(wall_textures);
 	SDL_FreeSurface(dark_wall_textures);
@@ -231,10 +357,28 @@ int main( int argc, char* args[] ){
 	return 0;
 }
 
-void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
+bool checkWhiteBlock( GameMap *gMap, MapObject *player ){
+	int mapX, mapY;
+	mapX = (int)( player->x + std::cos(player->ang)*(double)player->objDim ) >> TILESHIFT;
+	mapY = (int)( player->y - std::sin(player->ang)*(double)player->objDim ) >> TILESHIFT;
+	
+	Block *block = gMap->block_at( mapY, mapX );
+	
+	if( block != NULL ){
+		if( block->isWall ){
+			return block->colors[0] == 255 and block->colors[1] == 255 and block->colors[2] == 255;
+		}
+	}
+	
+	return false;
+}
+
+bool input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
 			std::set<int> keys, double speed, double angVel, double dt){
+	
 	double moveX, moveY, moveAng;
 	moveX = moveY = moveAng = 0.0;
+	bool touched = false;
 	
 	if( keys.count(SDLK_SPACE) != 0 ){
 		speed *= 2;
@@ -244,6 +388,9 @@ void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cn
 		speed /= 2;
 		angVel /= 2;
 	}
+	
+	if( keys.count(SDLK_LCTRL) != 0 )
+		touched = checkWhiteBlock( gMap, player );
 	
 	for(int n : keys){
 		switch(n){
@@ -276,6 +423,8 @@ void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cn
 	}
 	
 	player->move(gMap, agent_arr, agent_cnt, moveX, moveY, moveAng, true);
+	
+	return touched;
 }
 
 void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth){

@@ -10,10 +10,7 @@
 			double x, y, ang;
 			int objDim;
 			
-			MapObject(double x_, double y_, double ang_, int objDim_);
-			MapObject();
-			
-			void update(double x_, double y_, double ang_, int objDim_);
+			//void update(double x_, double y_, double ang_, int objDim_);
 			
 			int move(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 						double dx, double dy, double dang, bool rotate);
@@ -21,20 +18,37 @@
 			bool tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt);
 			
 			//draws at original x,y position on the screen
-			void draw(SDL_Surface *screenSurf);
+			//void draw(SDL_Surface *screenSurf);
 			
 			//draws at the center of the screen (for camera follow view)
-			void draw2DMap(SDL_Surface *screenSurf);
+			//void draw2DMap(SDL_Surface *screenSurf);
 			
-			void print();
+			//void print();
 			
+			virtual bool follow_player(GameMap *gmap, MapObject **agent_arr, int agent_cnt, 
+								int tile_radius, double speed, double angVel, double dt) = 0;
+			
+			virtual void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread) = 0;
+			virtual void sprite2D(SDL_Surface *screenSurf, MapObject *player) = 0;
+	};
+	
+	class Player : public MapObject{
+		
+		public:
+			Player(double x_, double y_, double ang_, int objDim_);
+			Player();
+			
+			void sprite3D( GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread );
+			void sprite2D( SDL_Surface *screenSurf, MapObject *player);
+			bool follow_player(GameMap *gmap, MapObject **agent_arr, int agent_cnt, 
+								int tile_radius, double speed, double angVel, double dt);
 	};
 	
 	class Agent : public MapObject{
 		private:
 			bool has_seen, follow_player_flag;
 			SDL_Surface *spriteSurf;
-			bool check_for_player(MapObject *player, int tile_radius);
+			bool check_for_player(GameMap *gMap, MapObject *player, int tile_radius);
 			
 		public:
 			Agent(SDL_Surface *surf, double posX, double posY, double ang_, int objDim_);
