@@ -1,24 +1,15 @@
 #include <stdio.h>
 #include <cmath>
+#include <string>
 #define PI 3.1415926535897932384
 
 //Refer to this header file for documentation
 //since header file already includes SDL, no need to include again
 #include "GameMap.h"
 
-//for a general block
-Block::Block(Uint8 R_, Uint8 G_, Uint8 B_, bool isWall_){
-	colors[0] = R_;
-	colors[1] = G_;
-	colors[2] = B_;
-	isWall = isWall_;
-}
-//default block is an empty block
-Block::Block() : Block(0, 0, 0, false){}
-
 //creates the game map by importing a bitmap file
 //uses SDL's internal mechanisms to read the bitmap file and create the map array
-GameMap::GameMap(const char *imgPath){
+GameMap::GameMap(const char *imgPath, SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio){
 	
 	//default is 16, can't be changed as of now
 	mapZoom = 16;
@@ -57,22 +48,55 @@ GameMap::GameMap(const char *imgPath){
 	for( int i = 0; i < mapImg->h; i++ ){
 		for( int j = 0; j < mapImg->w*3; j += 3 ){		//3 bytes per pixel
 			
-			//initializing an empty block
-			Block *newBlock = new Block();
+			//if wall is textured
+			bool is_textured = false;
 			
-			for( int k = 2; k >= 0; k-- ){
+			//proxy color
+			Uint8 color;
+			//colors of the wall in RGB
+			Uint8 colors[3];
+			
+			//checking if the block has textured walls
+			for( int k = 0; k < 3; k++ ){
 				
-				//setting block's color tuple to pixel's color tuple
-				//bytes are stored in reverse order in the surface, ie BGR
-				newBlock->colors[k] = pixel[i*mapImg->pitch + j + 2 - k];
+				color = pixel[i*mapImg->pitch + j + 2 - k];
+				colors[k] = color;
+				//red = 255
+				//blue is used to encode which texture file to choose
+				//blue values of 5 to 10 are considered, so a max of 6 textures are supported as of now
+				is_textured = ( k == 0 && color == 255 ) || 
+								( k == 1 && color == 0 ) ||
+								( k == 2 && color >= 5 && color <= 10 );
+			}
+			
+			Block *newBlock = NULL;
+			
+			if( is_textured ){
 				
-				//if any tuple value is nonzero, it's a wall block
-				if( newBlock->colors[k] != 0 )
-					newBlock->isWall = true;
-				else
-					//setting it to a dark gray so that
-					//when draw distance is reached, a full black isn't displayed
-					newBlock->colors[k] = 50;
+				//converting the color into an offset
+				color -= 5;
+				
+				//creating a textured block
+				newBlock = new TextureBlock( wall_textures, dark_wall_textures, color );
+				
+				for( int k = 0; k < 3; k++ )
+					newBlock->colors[k] = colors[k];
+			
+			}else{
+				
+				//creating a color block
+				newBlock = new ColorBlock( colors[0], colors[1], colors[2], false, wallColorRatio );
+				
+				for( int k = 0; k < 3; k++ ){
+					
+					//if any tuple value is nonzero, it's a wall block
+					if( newBlock->colors[k] != 0 )
+						newBlock->isWall = true;
+					else
+						//setting it to a dark gray so that
+						//when draw distance is reached, a full black isn't displayed
+						newBlock->colors[k] = 50;
+				}
 			}
 			
 			mapArr[i*mapDims[1] + (int)(j/3)] = newBlock;
@@ -81,10 +105,10 @@ GameMap::GameMap(const char *imgPath){
 	
 	//initializing these two arrays with empty blocks
 	for( int i = 0; i < mapDims[0]*V_WALL_CNT; i++ ){
-		mapVLines[i] = new Block();
+		mapVLines[i] = new ColorBlock(wallColorRatio);
 	}
 	for( int i = 0; i < mapDims[1]*H_WALL_CNT; i++ ){
-		mapHLines[i] = new Block();
+		mapHLines[i] = new ColorBlock(wallColorRatio);
 	}
 	
 	//setting walls around solid blocks as solid walls
@@ -102,16 +126,18 @@ GameMap::GameMap(const char *imgPath){
 			}
 		}
 	}
+	
+	SDL_FreeSurface( mapImg );
 }
 
-GameMap::~GameMap(){
+/*GameMap::~GameMap(){
 	for( int i = 0; i < mapDims[0]*mapDims[1]; i++ ){
 		delete mapArr[i];
 	}
 	delete mapArr;
 	delete mapVLines;
 	delete mapHLines;
-}
+}*/
 
 
 //for other components to extract array elements
@@ -213,37 +239,51 @@ void GameMap::drawFullMap(SDL_Surface* mapSurf){
 //center the display at posX, posY
 void GameMap::draw2DMap(SDL_Surface *screenSurf, int posX, int posY){
 	
+	//map positions of given surface at which this display should be centered
 	int mapX = posX >> TILESHIFT;
 	int mapY = posY >> TILESHIFT;
-	int xOffs = (posX - (mapX << TILESHIFT) ) >> 1;
-	int yOffs = (posY - (mapY << TILESHIFT) ) >> 1;
 	
+	//The posX, posY lies inside a block. The offsets are for how far away from the center of the screen the 
+	//top let corner of said block will lie on the screen (after some processing)
+	
+	//right now xoffs and yoffs are distances from the posX and posY to the block's top left corner
+	int xOffs = (posX - (mapX << TILESHIFT) );
+	int yOffs = (posY - (mapY << TILESHIFT) );
+	
+	//the bounds of the map portion that will be displayed on the screen
 	int mapxL, mapxH, mapyL, mapyH;
+	
+	//the bounds are decided by the amount of zoom
 	mapxL = mapX - mapZoom; mapyL = mapY - mapZoom;
 	mapxH = mapX + mapZoom; mapyH = mapY + mapZoom;
+	
+	//if zooming takes us out of bounds, cap it to min/max
 	if( mapxL < 0 ) mapxL = 0;
 	if( mapxH >= mapDims[1] ) mapxH = mapDims[1] - 1;
 	if( mapyL < 0 ) mapyL = 0;
 	if( mapyH >= mapDims[0] ) mapyH = mapDims[0] - 1;
 	
-	xOffs = ((screenSurf->w) >> 1) - xOffs;
-	yOffs = ((screenSurf->h) >> 1) - yOffs;
+	//to center xOffs and yOffs on the screen
+	//now, xoffs and yoffs are only offsets of the block in which posX and posY lie
+	xOffs = ((screenSurf->w - xOffs) >> 1);// - xOffs;
+	yOffs = ((screenSurf->h - yOffs) >> 1);// - yOffs;
 	
+	//we have to subract the lengths of the blocks that will lie to the left and top of the posX, posY block
+	//to get the offset of the first block that will be drawn onto the screen.
 	xOffs -= (mapX - mapxL) << (TILESHIFT - 1);
 	yOffs -= (mapY - mapyL) << (TILESHIFT - 1);
 	
 	for( int i = mapyL; i <= mapyH; i++ ){
 		for( int j = mapxL; j <= mapxH; j++ ){
+			
 			SDL_Rect blockRect;
 			blockRect.x = xOffs + ((j - mapxL) << (TILESHIFT - 1));
 			blockRect.y = yOffs + ((i - mapyL) << (TILESHIFT - 1));
 			blockRect.w = BLOCK_DIM >> 1; blockRect.h = BLOCK_DIM >> 1;
 			
-			SDL_FillRect( screenSurf, &blockRect, SDL_MapRGB(screenSurf->format,
-						mapArr[i*mapDims[1] + j]->colors[0],
-						mapArr[i*mapDims[1] + j]->colors[1],
-						mapArr[i*mapDims[1] + j]->colors[2])
-						);
+			//the block will handle the drawing
+			mapArr[i*mapDims[1] + j]->blit_wall_to_2d_screen( screenSurf, &blockRect );
+			
 		}
 	}
 }

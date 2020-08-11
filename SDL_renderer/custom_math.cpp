@@ -37,7 +37,8 @@ double modPI( double ang ){
 		return ang;
 }
 
-bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int depth, int *mapX, int *mapY, double *dist ){
+bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int depth,
+					int *mapX, int *mapY, double *dist, int *offset ){
 	double tanAng = std::tan(rAng);
 	int dof = 0;
 	double rayX, rayY, xOffs, yOffs;
@@ -68,7 +69,6 @@ bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int d
 		dof = depth;
 	}
 	
-	
 	//casting until depth of field is reached
 	while( dof < depth ){
 		//extracting the map indices from ray positions
@@ -86,12 +86,16 @@ bool cast_horiz_ray( GameMap *gMap, double posX, double posY, double rAng, int d
 		dof++;
 	}
 	
+	//for showing textured walls
+	*offset = (int) (rayX - (double)( ( (int)rayX >> TILESHIFT ) << TILESHIFT ));
+	
 	*dist = std::hypot(posX - rayX, posY - rayY);
 	
 	return dof == depth;
 }
 
-bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int depth, int *mapX, int *mapY, double *dist ){
+bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int depth,
+					int *mapX, int *mapY, double *dist, int *offset ){
 	double tanAng = std::tan(rAng);
 	int dof = 0;
 	double rayX, rayY, xOffs, yOffs;
@@ -136,6 +140,8 @@ bool cast_vert_ray( GameMap *gMap, double posX, double posY, double rAng, int de
 		}
 		dof++;
 	}
+	
+	*offset = (int) (rayY - (double)( ( (int)rayY >> TILESHIFT ) << TILESHIFT ));
 	
 	*dist = std::hypot(posX - rayX, posY - rayY);
 	

@@ -23,7 +23,7 @@ SDL_Surface *screenSurf = NULL;
 
 //SDL_Renderer* renderer = NULL;
 
-void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio);
+void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth);
 void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
 			std::set<int> keys, double speed, double angVel, double dt);
 void sprite2D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player);
@@ -44,7 +44,7 @@ bool init_SDL(){
 			printf( "Window couldnt be created. SDL error: %s\n", SDL_GetError() );
 			return false;
 		}else{
-			//SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 			
 			//renderer = SDL_CreateRenderer ( window, -1, SDL_RENDERER_ACCELERATED );
 			//getting the window surface
@@ -64,17 +64,46 @@ void close_SDL(){
 	SDL_Quit();
 }
 
+void create_dark_walls(SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio){
+	
+	SDL_LockSurface(wall_textures);
+	Uint8 *pixel = ((Uint8*)wall_textures->pixels);
+	SDL_UnlockSurface(wall_textures);
+	
+	SDL_LockSurface(dark_wall_textures);
+	Uint8 *dark_pixel = ((Uint8*)dark_wall_textures->pixels);
+	SDL_UnlockSurface(dark_wall_textures);
+	
+	for( int i = 0; i < dark_wall_textures->h; i++ ){
+		for( int j = 0; j < dark_wall_textures->pitch; j+=3 ){
+			for( int k = 0; k < 3; k++ )
+				dark_pixel[i*dark_wall_textures->pitch + j + k] 
+					= (Uint8)( wallColorRatio*pixel[i*wall_textures->pitch + j + k] );
+		}
+	}
+	
+}
+
 int main( int argc, char* args[] ){
-		
+	
+	//the image holding all the wall textures
+	SDL_Surface *wall_textures = SDL_LoadBMP("./Images/walls.bmp");
+	
+	//the image holding the darkened versions of the wall textures
+	SDL_Surface *dark_wall_textures = SDL_CreateRGBSurface( 0, wall_textures->w, wall_textures->h, 24, 0, 0, 0, 0 );
+	
+	//change the pixels in the dark texture image
+	create_dark_walls( wall_textures, dark_wall_textures, 0.75 );
+	
 	//creating a map object
-	GameMap gMap("./Images/levelTrial3.bmp");
+	GameMap gMap( "./Images/levelTrial3.bmp", wall_textures, dark_wall_textures, 0.75 );
 	//GameMap gMap("./Images/spriteTest.bmp");
 	
 	
 	//to get a map image that can be displayed
 	SDL_Surface *mapSurf = SDL_CreateRGBSurface(0, 448, 448, 32, 0, 0, 0, 0);
 	SDL_Surface *spriteSurf = SDL_LoadBMP("./Images/sprite3.bmp");
-	
+		
 	gMap.drawFullMap(mapSurf);
 	
 	//initializing the player
@@ -82,7 +111,7 @@ int main( int argc, char* args[] ){
 	MapObject player(80.0, 80.0, (7*PI)/2, 10);
 	Agent enemy( spriteSurf, 256.0, 256.0, 0.0, 10 );
 	
-	int agent_cnt = 2;
+	int agent_cnt = 1;
 	MapObject **agent_arr = new MapObject*[agent_cnt];
 	agent_arr[0] = &player;
 	agent_arr[1] = &enemy;
@@ -102,7 +131,6 @@ int main( int argc, char* args[] ){
 		
 		//to run the game loop
 		bool running = true;
-		bool game_over = false;
 		
 		bool show3D = true;
 		
@@ -170,28 +198,22 @@ int main( int argc, char* args[] ){
 			oldTime = newTime;
 			
 			//move player according to the keys pressed
-			if( !game_over )
-				input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt );
+			input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt );
 			
-			game_over = enemy.follow_player( &gMap, agent_arr, agent_cnt, 10, 100, 1.5, dt );
-			
-			if( game_over ){
-				SDL_FillRect( screenSurf, NULL, SDL_MapRGB(screenSurf->format, 255, 0, 0));
+			enemy.follow_player( &gMap, agent_arr, agent_cnt, 10, 100, 1.5, dt );
+						
+			if( show3D ){
+				
+				SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
+				SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
+				
+				castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD );
+				enemy.sprite3D( &gMap, screenSurf, &player, 0.5235987755982988);
 			}else{
-			
-				if( show3D ){
-					
-					SDL_FillRect( screenSurf, &sky, SDL_MapRGB(screenSurf->format, 255, 255, 255 ) );
-					SDL_FillRect( screenSurf, &ground, SDL_MapRGB(screenSurf->format, 50, 50, 50 ) );
-					
-					castRays( &gMap, &player, screenSurf, 30, DEPTH_OF_FIELD, 0.75 );
-					enemy.sprite3D( &gMap, screenSurf, &player, 0.5235987755982988);
-				}else{
-					SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
-					gMap.draw2DMap( screenSurf , player.x, player.y );
-					player.draw2DMap( screenSurf );
-					enemy.sprite2D( screenSurf, &player );
-				}
+				SDL_FillRect(screenSurf, NULL, SDL_MapRGB(screenSurf->format, 0, 0, 0));
+				gMap.draw2DMap( screenSurf , player.x, player.y );
+				player.draw2DMap( screenSurf );
+				enemy.sprite2D( screenSurf, &player );
 			}
 			
 			//update the window
@@ -201,6 +223,8 @@ int main( int argc, char* args[] ){
 	
 	//wrapping up everything
 	SDL_FreeSurface(mapSurf);
+	SDL_FreeSurface(wall_textures);
+	SDL_FreeSurface(dark_wall_textures);
 	mapSurf = NULL;
 	close_SDL();
 	
@@ -254,7 +278,7 @@ void input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cn
 	player->move(gMap, agent_arr, agent_cnt, moveX, moveY, moveAng, true);
 }
 
-void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth, double wallColorRatio){
+void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int angRange, int depth){
 	
 	//dimensions of the screen
 	int wid = screenSurf->w, hig = screenSurf->h;
@@ -269,70 +293,74 @@ void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int ang
 	double screenDist = (double)wid/( 2*std::tan(radAngRange) );
 	
 	//the height of the slice of the wall where the ray hits
-	int rayHig;
+	double rayHig;
 	
 	//map indices where the ray hits the wall
 	int vmapX, vmapY, hmapX, hmapY;
 	
 	vmapX = vmapY = hmapX = hmapY = 0;
 	
-	//angle at which ray casting starts (from left to right)
-	double rayAng = player->ang + radAngRange;
-	
 	for( int i = 0; i < rayCount; i++ ){
-	
-		double rAng = mod2PI(rayAng);
+		
+		//angle is calculated by atan
+		double rAng = mod2PI( player->ang + modPI( real_atan( screenDist, (double) ( ( wid >> 1 ) - i ) ) ) );
 		
 		double hDist, vDist;
 		
-		cast_horiz_ray( gMap, player->x, player->y, rAng, depth, &hmapX, &hmapY, &hDist );
-		cast_vert_ray( gMap, player->x, player->y, rAng, depth, &vmapX, &vmapY, &vDist );
+		//the horiz offset at which a slice of the wall texture is to be
+		//picked
+		int v_offset, h_offset, offset_x;
 		
-		//which among the two is smallest
+		cast_horiz_ray( gMap, player->x, player->y, rAng, depth, &hmapX, &hmapY, &hDist, &h_offset );
+		cast_vert_ray( gMap, player->x, player->y, rAng, depth, &vmapX, &vmapY, &vDist, &v_offset );
+		
+		//which among the two distances is smallest
 		double finalDist;
-		//color of wall which the ray hit
-		Uint8 wallColor[3];
-		wallColor[0] = wallColor[1] = wallColor[2] = 0;
+		
+		//the wall where the ray hit
+		Block *wall = NULL;
+		bool isVertical = false;
 		
 		if( vDist > hDist ){
 			finalDist = hDist;
-			Block *wall = gMap->horiz_wall_at( hmapY, hmapX );
+			offset_x = h_offset;
+			wall = gMap->horiz_wall_at( hmapY, hmapX );
 			
-			if( wall != NULL ){
-				for( int j = 0; j < 3; j++ )
-					wallColor[j] = wall->colors[j];
-			}
 		}else{
 			finalDist = vDist;
-			Block *wall = gMap->vert_wall_at( vmapY, vmapX );
+			offset_x = v_offset;
+			wall = gMap->vert_wall_at( vmapY, vmapX );
+			isVertical = true;
 			
-			if( wall != NULL ){
-				for( int j = 0; j < 3; j++ )
-					wallColor[j] = wallColorRatio*wall->colors[j];
-			}
 		}
 		
 		//removing fish eye effect
 		finalDist *= std::cos(rAng - player->ang);
 		
 		if( finalDist == 0.0 ){
-			//if intersecting with a wall, reject ray
-			////this avoids zero division////
-			rayAng += (2*radAngRange)/rayCount;
+			//skip drawing this ray
 			continue;
 		}
 		
-		rayHig = ( BLOCK_DIM * screenDist )/finalDist;
+		rayHig = ( (double)BLOCK_DIM * screenDist )/finalDist;
+		
+		//if slice height is lesser than screen height, texture doesn't get clipped
+		//but if slice height is greater than, then the texture has to be clipped
+		//from above and below to coincide with the field of view of the player
+		int offset_y = 0;
+		
+		if( rayHig > hig ){
+			offset_y = (int)(((rayHig - (double)hig)*(double)BLOCK_DIM)/(2.0*rayHig));
+		}
 		
 		//capping ray height at screen height
-		rayHig = rayHig > hig ? hig : rayHig;
+		rayHig = rayHig > hig ? (double)hig : rayHig;
 		
 		SDL_Rect slice;
-		slice.y = (hig - rayHig) >> 1; slice.x = i;
-		slice.h = rayHig; slice.w = 1;
+		slice.y = (hig - (int)rayHig) >> 1; slice.x = i;
+		slice.h = (int)rayHig; slice.w = 1;
 		
-		SDL_FillRect( screenSurf, &slice, SDL_MapRGB(screenSurf->format, wallColor[0], wallColor[1], wallColor[2] ) );
+		wall->blit_wall_to_screen( screenSurf, &slice, offset_x, offset_y, isVertical );
 		
-		rayAng -= (2*radAngRange)/rayCount;
 	}
 }

@@ -2,19 +2,7 @@
 #define GAME_MAP
 
 #include <SDL2/SDL.h>
-#include <set>
-//#include "MapObject.h"
-
-struct Block{
-	//Holds the color tuple for the wall colors
-	Uint8 colors[3];
-	//If this block is a wall
-	bool isWall;
-	//constructor for a general block
-	Block(Uint8 R_, Uint8 G_, Uint8 B_, bool isWall_);
-	//constructor for an empty block
-	Block();
-};
+#include "blocks.h"
 
 class GameMap{
 	private:
@@ -24,6 +12,8 @@ class GameMap{
 		Block **mapArr;
 		//the vert and horiz walls in the map
 		Block **mapVLines, **mapHLines;
+		
+		Block *texture_blocks[5];
 		
 		//Number of horiz and vertical walls
 		int H_WALL_CNT, V_WALL_CNT;
@@ -39,8 +29,8 @@ class GameMap{
 		
 		//creates the game map by importing a bitmap file
 		//uses SDL's internal mechanisms to read the bitmap file and create the map array
-		GameMap(const char *imgPath);
-		~GameMap();
+		GameMap(const char *imgPath, SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio);
+		//~GameMap();
 		
 		//prints the map to the console
 		void printMap();

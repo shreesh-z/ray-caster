@@ -303,9 +303,10 @@ void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, 
 			double rAng = mod2PI(start_ang - i*ang_step);
 			
 			double vDist, hDist, finalDist;
+			int off;
 			
-			cast_horiz_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &hDist);
-			cast_vert_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &vDist);
+			cast_horiz_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &hDist, &off);
+			cast_vert_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &vDist, &off);
 			
 			//just like normal ray casting
 			finalDist = vDist > hDist ? hDist : vDist;
