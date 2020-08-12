@@ -3,7 +3,6 @@
 
 const unsigned BLOCK_DIM = 64;
 const unsigned TILESHIFT = 6;
-//SDL_Init( SDL_INIT_VIDEO );
 
 //for a general block
 ColorBlock::ColorBlock(Uint8 R_, Uint8 G_, Uint8 B_, bool isWall_, double wallColorRatio ){
@@ -68,7 +67,7 @@ TextureBlock::TextureBlock( SDL_Surface *wall_textures, SDL_Surface *dark_wall_t
 	dark_wall_texture = dark_wall_textures;
 	
 	//texture_offset * 64 is the actual position where this block's texture lies
-	texture_offset = texture_offset_;
+	texture_offset = texture_offset_ << TILESHIFT;
 	
 	//textured blocks are always solid
 	isWall = true;
@@ -80,7 +79,7 @@ void TextureBlock::blit_wall_to_screen( SDL_Surface *screenSurf, SDL_Rect *dstRe
 	SDL_Rect srcRect;
 	
 	//first the correct wall texture is found, then the horiz offset is applied
-	srcRect.x = (texture_offset << TILESHIFT) + offset;
+	srcRect.x = texture_offset + offset;
 	srcRect.y = offset_y;
 
 	srcRect.w = 1; srcRect.h = BLOCK_DIM - ( offset_y << 1 );
@@ -94,7 +93,7 @@ void TextureBlock::blit_wall_to_screen( SDL_Surface *screenSurf, SDL_Rect *dstRe
 
 void TextureBlock::blit_wall_to_2d_screen( SDL_Surface *screenSurf, SDL_Rect *dstRect ){
 	SDL_Rect srcRect;
-	srcRect.x = ( texture_offset << TILESHIFT ); srcRect.y = 0;
+	srcRect.x = texture_offset; srcRect.y = 0;
 	srcRect.w = BLOCK_DIM; srcRect.h = BLOCK_DIM;
 	
 	//scaling is done, otherwise it doesn't work properly

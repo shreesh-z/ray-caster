@@ -9,29 +9,6 @@ const unsigned BLOCK_DIM = 64;
 const int DEPTH_OF_FIELD = 20;
 
 
-/*void MapObject::print(){
-	printf( "%lf %lf %lf %d \n", x, y, ang, objDim );
-}*/
-
-/*void MapObject::update(double x_, double y_, double ang_, int objDim_){
-	x = x_; y = y_;
-	ang = ang_;
-	objDim = objDim_;
-}*/
-
-/*void MapObject::draw(SDL_Surface *screenSurf){
-	//drawing player square
-	SDL_Rect playRect;
-	playRect.x = x - (objDim >> 1);
-	playRect.y = y - (objDim >> 1);
-	playRect.w = objDim; playRect.h = objDim;
-	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 255, 0 ) );
-	
-	playRect.x = x + objDim*std::cos(ang);
-	playRect.y = y - objDim*std::sin(ang);
-	playRect.w = 5; playRect.h = 5;
-	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
-}*/
 
 int MapObject::move(GameMap *gMap, MapObject **agent_arr, int agent_cnt, double dx, double dy, double dang, bool rotate){
 	
@@ -42,6 +19,7 @@ int MapObject::move(GameMap *gMap, MapObject **agent_arr, int agent_cnt, double 
 	
 	if( rotate ){
 		//projecting motion in object's reference frame axes to grid axes
+		//done for player input
 		moveX = std::cos(ang)*dx + std::sin(ang)*dy;
 		moveY = -std::sin(ang)*dx + std::cos(ang)*dy;
 	}
@@ -75,6 +53,8 @@ int MapObject::move(GameMap *gMap, MapObject **agent_arr, int agent_cnt, double 
 
 bool MapObject::tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt){
 	int xl, xh, yl, yh;
+	
+	//the indices in the map array where the four corners of the object's square lie
 	xl = ((int)this->x - (this->objDim >> 1)) >> TILESHIFT;
 	xh = ((int)this->x + (this->objDim >> 1)) >> TILESHIFT;
 	yl = ((int)this->y - (this->objDim >> 1)) >> TILESHIFT;
@@ -91,13 +71,13 @@ bool MapObject::tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt){
 	if( this == agent_arr[0] )
 		return true;
 	
-	double bxl, bxh, byl, byh;	//bounds of the agent
+	double bxl, bxh, byl, byh;	//actual bounds of the agent (not in the mapa array like before)
 	bxl = this->x - (this->objDim >> 1);
 	bxh = this->x + (this->objDim >> 1);
 	byl = this->y - (this->objDim >> 1);
 	byh = this->y + (this->objDim >> 1);
 	
-	for( int a = 0; a < agent_cnt; a++ ){	//starts from 1 as 0 is player
+	for( int a = 0; a < agent_cnt; a++ ){
 		
 		if( this == agent_arr[a] )
 			continue;
@@ -125,13 +105,15 @@ Player::Player(double x_, double y_, double ang_, int objDim_){
 	ang = ang_;
 	objDim = objDim_;
 }
+//default object has dimension 10
 Player::Player() : Player::Player(0, 0, 0, 10) {}
 
 //draws at the center of the screen
 void Player::sprite2D(SDL_Surface *screenSurf, MapObject *player){
 	
 	SDL_Rect playRect;
-	playRect.x = ( ( screenSurf->w ) >> 1 ) - ( objDim >> 2 ) ;
+	//objDim/4 is done because top-down view is drawn at half size
+	playRect.x = ( ( screenSurf->w ) >> 1 ) - ( objDim >> 2 );
 	playRect.y = ( ( screenSurf->h ) >> 1 ) - ( objDim >> 2 );
 	playRect.w = objDim >> 1; playRect.h = objDim >> 1;
 	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 255, 0 ) );
@@ -142,11 +124,13 @@ void Player::sprite2D(SDL_Surface *screenSurf, MapObject *player){
 	SDL_FillRect( screenSurf, &playRect, SDL_MapRGB(screenSurf->format, 255, 0, 0 ) );
 }
 
+//does nothing
 bool Player::follow_player(GameMap *gmap, MapObject **agent_arr,
 				int agent_cnt, int tile_radius, double speed, double angVel, double dt){
 	return false;
 }	
 
+//does nothing
 void Player::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread){}
 //void MapObject::sprite2D(SDL_Surface *screenSurf, MapObject *player){}
 
@@ -158,12 +142,13 @@ Agent::Agent(SDL_Surface *surf, double posX, double posY, double ang_, int objDi
 	objDim = objDim_;
 	x = posX; y = posY; ang = ang_;
 	this->reset();
+	has_seen_once = false;
 	
 	//hardcoded to always follow player
 	follow_player_flag = true;
 }
 
-//agents only forgets that it has seen player
+//agents only stops seeing player
 void Agent::reset(){
 	has_seen = false;
 }
@@ -171,34 +156,50 @@ void Agent::reset(){
 //agent forgets that it has seen player, and also stops following
 void Agent::reset_to_idle(){
 	this->reset();
+	has_seen_once = false;
 	follow_player_flag = false;
 }
 
 bool Agent::check_for_player(GameMap *gMap, MapObject *player, int tile_radius){
 	
-	if( has_seen ) return true;
+	//if( has_seen ) return true;
 	
 	int diffX = (int)(x - player->x) >> TILESHIFT;
 	int diffY = (int)(y - player->y) >> TILESHIFT;
 	
+	//tile distance between player and agent
 	double dist = std::hypot(diffX, diffY);
 	
 	if( dist < tile_radius ){
+		//if tile distance is less than radius of sight of agent, next check if player is blocked by a wall
+		//for this we cast a ray from the agent to the player and check for wall collisions
 		double diffX_ = player->x - this->x;
 		double diffY_ = -(player->y - this->y);
+		//angle at which ray is casted
 		double rayAng = real_atan( diffX_, diffY_ );
 		
+		//distances from walls
 		double vDist, hDist, finalDist;
-		//placeholders
+		//placeholders, these are not used at all
 		int a, b, c;
 		cast_vert_ray( gMap, this->x, this->y, rayAng, tile_radius, &a, &b, &vDist, &c );
 		cast_horiz_ray( gMap, this->x, this->y, rayAng, tile_radius, &a, &b, &hDist, &c );
 		
 		finalDist = vDist > hDist ? hDist : vDist;
 		
+		//real (map) distance between the agent and the player
 		double real_dist = std::hypot( diffX_, diffY_ );
 		
-		has_seen = finalDist > real_dist;
+		//if wall is farther away than the player		
+		has_seen = has_seen ? true : finalDist > real_dist;
+	
+	}else if( dist > ( tile_radius << 2 ) )
+		//if the player is too far away, forget that you have seen them
+		has_seen = false;
+	
+	//if agent has seen player at least once before resetting
+	if( !has_seen_once and has_seen ){
+		has_seen_once = true;
 	}
 	
 	return has_seen;
@@ -214,24 +215,31 @@ bool Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 			moveX = moveY = movAng = 0.0;
 			
 			//this finds the angle between the player and the agent
-			//agent_arr[0] is the player
+			//(agent_arr[0] is always the player)
 			double diffX = agent_arr[0]->x - this->x;
 			double diffY = -(agent_arr[0]->y - this->y);
 			
 			double dist = std::hypot( diffX, diffY );
+			
+			//if the agent and the player have collided, return true and don't move
+			//returning true ends the game anyway, so no need to move
 			if( dist < this->objDim + agent_arr[0]->objDim )
 				return true;
 			
+			//player is at which side of the agent, left or right
+			//first find the difference mod 2PI, then convert it to lie in (-pi, pi)
 			double ang_diff = modPI( mod2PI( real_atan( diffX, diffY ) - this->ang ) );
 			
-			if( ang_diff > 0 )
+			if( ang_diff > 0 )		//if player is to the left
 				movAng += angVel*dt;
-			else
+			else					//if player is to the right
 				movAng -= angVel*dt;
 			
+			//move in the direction of the current angle
 			moveX += std::cos(this->ang)*speed*dt;
 			moveY -= std::sin(this->ang)*speed*dt;
 			
+			//clip the motion
 			int clip = this->move( gMap, agent_arr, agent_cnt, moveX, moveY, movAng, false);
 			
 			//to compensate for collisions with wall
@@ -276,18 +284,22 @@ bool Agent::follow_player(GameMap *gMap, MapObject **agent_arr, int agent_cnt,
 	return false;
 }
 
+//PLEASE NOTE THAT THE POINT OF VIEW OF THIS FUNCTION IS OF THE PLAYER, NOT THE AGENT.
+//ALL ANGLES CALCULATED ARE OF THE AGENT ACC. TO THE PLAYER
 void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, double spread){
 	
 	//axes are normal cartesian coordinates, have to flip y axis
 	double diffX = (this->x - player->x);
 	double diffY = -(this->y - player->y);
 	
+	//distance between the player and the agent
 	double dist = std::hypot( diffX , diffY );
 	
 	//dont do anything if the sprite is very far away
 	if( ((int)dist >> TILESHIFT) > DEPTH_OF_FIELD )
 		return;
 	
+	//angle at which the agent lies acc. to the player
 	double sprite_ang = real_atan( diffX, diffY );
 	
 	//The first mod2PI brings the difference back to the original modulo 2pi
@@ -297,7 +309,12 @@ void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, 
 	//angular size of sprite
 	double half_ang_sprite_size = std::atan( (double)(spriteSurf->w >> 1) / dist );
 	
+	//if the sprite lies in the field of view of the player
+	//the abs is calculated so that if part of the sprite lies inside the FOV, it is still drawn
 	if( std::fabs(ang_diff) - std::fabs(half_ang_sprite_size) < spread ){
+		
+		//NOW WE CAST THE RAYS TO DRAW THE SPRITE
+		//rays are cast so that wall clipping can be performed where sprites are being blocked by walls
 		
 		//horiz position on screen at which sprite is centered
 		//-(ang_diff/spread) because larger angles are placed nearer to the left on the screen
@@ -326,13 +343,12 @@ void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, 
 		for( int i = 0; i < sprite_wid; i++ ){
 			
 			//only placeholders
-			int mapX, mapY;
+			int mapX, mapY, off;
 			
 			//angle at which ray is casted, modulo 2pi
 			double rAng = mod2PI(start_ang - i*ang_step);
 			
 			double vDist, hDist, finalDist;
-			int off;
 			
 			cast_horiz_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &hDist, &off);
 			cast_vert_ray( gMap, player->x, player->y, rAng, DEPTH_OF_FIELD, &mapX, &mapY, &vDist, &off);
@@ -340,6 +356,7 @@ void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, 
 			//just like normal ray casting
 			finalDist = vDist > hDist ? hDist : vDist;
 			
+			//draw a slice of the sprite IFF A WALL IS NOT BLOCKING the sprite at this slice
 			if( finalDist > dist ){
 				
 				SDL_Rect srcRect;
@@ -361,6 +378,12 @@ void Agent::sprite3D(GameMap *gMap, SDL_Surface *screenSurf, MapObject *player, 
 }
 
 void Agent::sprite2D(SDL_Surface *screenSurf, MapObject *player){
+	
+	//this is done to dissuade cheating by just checking the top down view to look through walls
+	//If an agent hasn't seen the player yet, dont draw it on the screen
+	if( !has_seen_once )
+		return;
+	
 	SDL_Rect aRect;
 	int screen_x = ( screenSurf->w >> 1 ) + ( (int)( (this->x - player->x) ) >> 1 );
 	int screen_y = ( screenSurf->h >> 1 ) + ( (int)( (this->y - player->y) ) >> 1 );
@@ -369,7 +392,7 @@ void Agent::sprite2D(SDL_Surface *screenSurf, MapObject *player){
 	aRect.w = this->objDim >> 1;
 	aRect.h = this->objDim >> 1;
 	
-	//if rectangle out of bounds;
+	//if rectangle out of bounds, dont draw
 	if( aRect.x + aRect.w < 0 or aRect.y + aRect.h < 0 or aRect.x > screenSurf->w or aRect.y > screenSurf->h )
 		return;
 	

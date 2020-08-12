@@ -27,10 +27,8 @@ class GameMap{
 		const unsigned BLOCK_DIM = 64;
 		const unsigned TILESHIFT = 6;
 		
-		//creates the game map by importing a bitmap file
-		//uses SDL's internal mechanisms to read the bitmap file and create the map array
+		//creates the game map by using the game map image
 		GameMap(SDL_Surface *mapImg, SDL_Surface *wall_textures, SDL_Surface *dark_wall_textures, double wallColorRatio);
-		//~GameMap();
 		
 		//prints the map to the console
 		void printMap();

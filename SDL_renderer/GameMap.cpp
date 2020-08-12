@@ -84,11 +84,13 @@ GameMap::GameMap(SDL_Surface *mapImg, SDL_Surface *wall_textures, SDL_Surface *d
 			
 			}else{
 				
-				if( colors[0] == 0 and colors[1] == 255 and colors[2] == 1 ){
+				//if this block has the player or an agent, set it to an empty block
+				if( ( colors[0] == 0 and colors[1] == 255 and colors[2] == 1 )
+					or( colors[0] == 1 and colors[1] == 0 and colors[2] == 255 ) ){
 					colors[0] = colors[1] = colors[2] = 0;
 				}
 				
-				//creating a color block
+				//creating a colored block
 				newBlock = new ColorBlock( colors[0], colors[1], colors[2], false, wallColorRatio );
 				
 				for( int k = 0; k < 3; k++ ){
@@ -131,16 +133,6 @@ GameMap::GameMap(SDL_Surface *mapImg, SDL_Surface *wall_textures, SDL_Surface *d
 		}
 	}
 }
-
-/*GameMap::~GameMap(){
-	for( int i = 0; i < mapDims[0]*mapDims[1]; i++ ){
-		delete mapArr[i];
-	}
-	delete mapArr;
-	delete mapVLines;
-	delete mapHLines;
-}*/
-
 
 //for other components to extract array elements
 Block* GameMap::block_at( int y, int x ){
