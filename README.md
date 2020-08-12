@@ -3,8 +3,8 @@ A simple ray casting engine I'm building using two languages:
 * Python, with pygame and numpy
 * C++, with SDL for windows API support (basically the backend of pygame)
 
-The python engine is way ahead of the C++ engine, as I started work on it first.
-I will only be working on the C++ engine from now on. I may work on the python engine on request.
+The C++ engine is way ahead of the pygame engine.
+I've stopped working on the pygame engine because python is too damn slow.
 
 Enemy agents are now added to the engine. As of right now they keep following the player unless hardcoded not to.
 Once the enemy/s touch the player, the game is over.
@@ -24,6 +24,7 @@ This is how to create levels in paint:
 * Place black pixels to create empty blocks
 * Place a pixel of value RGB (1, 0, 255) where you want the player to be at the start
 * Place a pixel of value RGB (0, 255, 1) where you want to place an enemy
+* Place pixels of any other color to create walls
 * Textured walls have special pixel values: RGB (255, 0, 5) to (255, 0, 10). Six textures can be currently loaded, you can add more yourself
 * Remember to place a white pixel so you can win the game
 
