@@ -27,8 +27,6 @@ void castRays(GameMap *gMap, MapObject *player, SDL_Surface *screenSurf, int ang
 bool input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
 			std::set<int> keys, double speed, double angVel, double dt);
 bool checkWhiteBlock( GameMap *gMap, MapObject *player );
-//void sprite2D(SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player);
-//void sprite3D(GameMap *gMap, SDL_Surface *screenSurf, SDL_Surface *spriteSurf, MapObject *player, double x, double y, double spread);
 
 //Initializing SDL
 bool init_SDL(){
@@ -45,7 +43,7 @@ bool init_SDL(){
 			printf( "Window couldnt be created. SDL error: %s\n", SDL_GetError() );
 			return false;
 		}else{
-			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			//SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 			
 			//renderer = SDL_CreateRenderer ( window, -1, SDL_RENDERER_ACCELERATED );
 			//getting the window surface
@@ -103,7 +101,7 @@ int main( int argc, char* args[] ){
 	
 	
 	//this is the map image that is used to load the map
-	SDL_Surface *mapImg = SDL_LoadBMP("./Images/levelTrial4.bmp");
+	SDL_Surface *mapImg = SDL_LoadBMP("./Images/levelTrial5.bmp");
 	//SDL_Surface *mapImg = SDL_LoadBMP("./Images/spriteTest.bmp");
 	
 	if( mapImg == NULL ){

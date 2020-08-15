@@ -28,8 +28,9 @@ This is how to create levels in paint:
 * Textured walls have special pixel values: RGB (255, 0, 5) to (255, 0, 10). Six textures can be currently loaded, you can add more yourself
 * Remember to place a white pixel so you can win the game
 
-I'm also planning on adding GPU rendering in the next commit.
-I want to keep the CPU and GPU rendering repos separate, so I'll be creating a different repo or a different branch
-for it. Maybe fork it to a different repo altogether.
+I've now added hardware rendering. The source code and executable sit in a different folder than the one with software rendering.
+Performance isn't boosted by much, but I wanted to do so just to make the rendering more modern.
+
+I'll be adding a faster enemy type, with greater detection radius, now that I've added speed and angVel attributes to the Agent class.
 
 Thanks for reading this.
