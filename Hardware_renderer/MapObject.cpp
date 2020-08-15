@@ -317,7 +317,8 @@ void Agent::sprite3D(GameMap *gMap, SDL_Renderer *renderer, MapObject *player, d
 	double ang_diff = modPI( mod2PI( sprite_ang - player->ang ) );
 	
 	int spriteTextWid, spriteTextHig;
-	SDL_QueryTexture( spriteText, NULL, NULL, &spriteTextWid, &spriteTextHig );
+	SDL_QueryTexture( spriteText, NULL, NULL, &spriteTextWid, NULL );
+	spriteTextHig = spriteTextWid; //ONLY SQUARE SPRITES ARE ALLOWED
 	
 	//angular size of sprite
 	double half_ang_sprite_size = std::atan( (double)(spriteTextWid >> 1) / dist );
@@ -328,6 +329,12 @@ void Agent::sprite3D(GameMap *gMap, SDL_Renderer *renderer, MapObject *player, d
 		
 		//NOW WE CAST THE RAYS TO DRAW THE SPRITE
 		//rays are cast so that wall clipping can be performed where sprites are being blocked by walls
+		
+		//angle at which agent is being viewed at by player + PI/8
+		double VIEW_ANGLE = mod2PI( mod2PI( mod2PI( this->ang - player->ang ) + PI ) + 0.125*PI );
+		
+		//which sprite to choose based on angle
+		int SPRITE = (int)( ( VIEW_ANGLE*4 )/PI );
 		
 		//horiz position on screen at which sprite is centered
 		//-(ang_diff/spread) because larger angles are placed nearer to the left on the screen
@@ -374,7 +381,7 @@ void Agent::sprite3D(GameMap *gMap, SDL_Renderer *renderer, MapObject *player, d
 				
 				SDL_Rect srcRect;
 				srcRect.x = (int)((double)(spriteTextWid*i)/(double)sprite_wid);
-				srcRect.y = 0;
+				srcRect.y = SPRITE*spriteTextWid;	//offset for choosing sprite
 				srcRect.w = ((double)spriteTextWid/(double)sprite_wid) + 1;
 				srcRect.h = spriteTextHig;
 				
@@ -385,6 +392,7 @@ void Agent::sprite3D(GameMap *gMap, SDL_Renderer *renderer, MapObject *player, d
 				dstRect.w = 1;
 				
 				SDL_RenderCopy( renderer, spriteText, &srcRect, &dstRect);
+
 			}
 		}
 	}
@@ -411,6 +419,13 @@ void Agent::sprite2D(SDL_Renderer *renderer, MapObject *player){
 	//if rectangle out of bounds, dont draw
 	if( aRect.x + aRect.w < 0 or aRect.y + aRect.h < 0 or aRect.x > wid or aRect.y > hig )
 		return;
+	
+	int spriteTextWid;
+	SDL_QueryTexture( spriteText, NULL, NULL, &spriteTextWid, NULL );
+	
+	SDL_Rect srcRect;
+	srcRect.x = srcRect.y = 0;
+	srcRect.w = srcRect.h = spriteTextWid;
 	
 	SDL_RenderCopy( renderer, this->spriteText, NULL, &aRect );
 	

@@ -43,7 +43,7 @@ bool init_SDL(){
 			printf( "Window couldnt be created. SDL error: %s\n", SDL_GetError() );
 			return false;
 		}else{
-			//SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 			
 			//renderer = SDL_CreateRenderer ( window, -1, SDL_RENDERER_ACCELERATED );
 			//getting the window surface

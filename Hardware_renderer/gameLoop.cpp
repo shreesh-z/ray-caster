@@ -365,10 +365,6 @@ int main( int argc, char* args[] ){
 			
 			while( paused ){
 				
-				//show pause screen
-				//SDL_BlitScaled( pauseScreen, NULL, screenSurf, NULL );
-				//SDL_UpdateWindowSurface( window );
-				
 				while( SDL_PollEvent( &e ) != 0 ){
 					switch( e.type ){
 						
