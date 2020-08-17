@@ -30,7 +30,9 @@ This is how to create levels in paint:
 
 I've now added hardware rendering. The source code and executable sit in a different folder than the one with software rendering.
 Performance isn't boosted by much, but I wanted to do so just to make the rendering more modern.
+Although I _have_ optimized the enemy code a bit.
 
-I'll be adding a faster enemy type, with greater detection radius, now that I've added speed and angVel attributes to the Agent class.
+I've added a faster enemy type, with double the earlier speed.
+These fast bois should only be at the end of the level, to surprise the player.
 
 Thanks for reading this.

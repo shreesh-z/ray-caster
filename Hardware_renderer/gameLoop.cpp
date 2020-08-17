@@ -14,8 +14,8 @@ const unsigned BLOCK_DIM = 64;
 const unsigned TILESHIFT = 6;
 const int DEPTH_OF_FIELD = 20;
 
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
+const int SCREEN_WIDTH = 1920;
+const int SCREEN_HEIGHT = 1080;
 
 //the window on which everything is displayed
 SDL_Window *window = NULL;
@@ -92,10 +92,44 @@ void create_dark_walls(SDL_Surface *wall_textures, SDL_Surface *dark_wall_textur
 	
 }
 
+void frame_rate( SDL_Renderer *renderer, SDL_Texture *numbers, int fps ){
+	
+	if( fps > 99 )
+		return;
+	int digs[2];
+	
+	//extracting digits
+	digs[0] = (int)( fps/10 );
+	digs[1] = fps % 10;
+	
+	int wid, hig;
+	SDL_GetRendererOutputSize( renderer, &wid, &hig );
+	
+	SDL_Rect srcRect, dstRect;
+	srcRect.x = 5*digs[1]; srcRect.y = 0;
+	srcRect.w = 4; srcRect.h = 7;
+	
+	//draw at the top right corner of the screen
+	dstRect.x = wid - 25; dstRect.y = 0;
+	dstRect.w = 20; dstRect.h = 35;
+	SDL_RenderCopy( renderer, numbers, &srcRect, &dstRect );
+	
+	srcRect.x = 5*digs[0]; srcRect.y = 0;
+	srcRect.w = 5; srcRect.h = 7;
+	
+	dstRect.x = wid - 50; dstRect.y = 0;
+	dstRect.w = 25; dstRect.h = 35;
+	
+	SDL_RenderCopy( renderer, numbers, &srcRect, &dstRect );
+	
+}
+
 int main( int argc, char* args[] ){
 	
 	if( !init_SDL() )
 		return 0;
+	
+	SDL_Texture *numbers = IMG_LoadTexture( renderer, "./Images/numbers.bmp" );
 	
 	//the image holding all the wall textures
 	SDL_Surface *wall_surfaces = SDL_LoadBMP("./Images/walls.bmp");
@@ -155,16 +189,21 @@ int main( int argc, char* args[] ){
 	for( int i = 0; i < mapImg->h; i++ ){
 		for( int j = 0; j < mapImg->w*3; j+=3 ){
 			
-			//finding number of agents on the map, RGB = (0, 255, 1) is an agent
-			if( pixel[i*mapImg->pitch + j] == 1
+			//finding number of agents on the map, RGB = (0, 255, 1) is an agent and RGB = (1, 0, 255) is a fast agent
+			if( ( pixel[i*mapImg->pitch + j] == 1
 				and pixel[i*mapImg->pitch + j + 1] == 255
 				and pixel[i*mapImg->pitch + j + 2] == 0 )
+				or
+				( pixel[i*mapImg->pitch + j] == 255
+				and pixel[i*mapImg->pitch + j + 1] == 0
+				and pixel[i*mapImg->pitch + j + 2] == 1 )
+				)
 					agent_cnt += 1;
 			
-			//finding the player's block and assigning position, RGB = (1, 0, 255) is the player
-			if( pixel[i*mapImg->pitch + j] == 255
-				and pixel[i*mapImg->pitch + j + 1] == 0
-				and pixel[i*mapImg->pitch + j + 2] == 1 ){
+			//finding the player's block and assigning position, RGB = (255, 255, 254) is the player
+			if( pixel[i*mapImg->pitch + j] == 254
+				and pixel[i*mapImg->pitch + j + 1] == 255
+				and pixel[i*mapImg->pitch + j + 2] == 255 ){
 					
 				player.x = (double)( ( (int)(j/3) << TILESHIFT ) + ( BLOCK_DIM >> 1 ));
 				player.y = (double)( ( i << TILESHIFT ) + ( BLOCK_DIM >> 1 ) );
@@ -192,16 +231,29 @@ int main( int argc, char* args[] ){
 				agent_arr[agent_index]->y = (double)( ( i << TILESHIFT ) + ( BLOCK_DIM >> 1 ) );
 				
 				agent_index++;
+			}
+			
+			else if( pixel[i*mapImg->pitch + j] == 255
+				and pixel[i*mapImg->pitch + j + 1] == 0
+				and pixel[i*mapImg->pitch + j + 2] == 1 ){
+					
+				agent_arr[agent_index]->x = (double)( ( (int)(j/3) << TILESHIFT ) + ( BLOCK_DIM >> 1 ));
+				agent_arr[agent_index]->y = (double)( ( i << TILESHIFT ) + ( BLOCK_DIM >> 1 ) );
+				agent_arr[agent_index]->double_speed();
+				agent_arr[agent_index]->ang = PI*0.5;
 				
-				if( agent_index > agent_cnt ){
-					printf("Agent array not initialized\n");
-					SDL_DestroyTexture( wall_textures );
-					SDL_DestroyTexture( dark_wall_textures );
-					SDL_DestroyTexture( spriteText );
-					SDL_FreeSurface( mapImg );
-					close_SDL();
-					return 0;
-				}
+				agent_index++;
+			
+			}
+				
+			if( agent_index > agent_cnt ){
+				printf("Agent array not initialized\n");
+				SDL_DestroyTexture( wall_textures );
+				SDL_DestroyTexture( dark_wall_textures );
+				SDL_DestroyTexture( spriteText );
+				SDL_FreeSurface( mapImg );
+				close_SDL();
+				return 0;
 			}
 		}
 	}
@@ -308,6 +360,11 @@ int main( int argc, char* args[] ){
 	SDL_Rect sky, ground;
 	sky.x = 0; sky.y = 0; sky.h = height >> 1; sky.w = width;
 	ground.x = 0; ground.y = height >> 1; ground.h = ground.y; ground.w = width;
+	
+	double total_time;
+	total_time = 0;
+	int avg_frame_rate = 60;
+	int frames = 0;
 	
 	//MAIN+GAME+LOOP+++++++++++++++++MAIN+GAME+LOOP++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	while( running ){
@@ -463,6 +520,20 @@ int main( int argc, char* args[] ){
 		}else{
 			//if game is over or won, then stop running the game loop
 			running = false;
+		}
+		
+		total_time += dt;
+		frames += 1;
+		
+		if( total_time > 0.1 ){
+			avg_frame_rate = (double)(frames)/total_time;
+			frame_rate( renderer, numbers, avg_frame_rate );
+			total_time = 0.0;
+			frames = 0;
+			if( avg_frame_rate < 40 )
+				printf( "Very Low Framerate: %d\n", avg_frame_rate );
+		}else{
+			frame_rate( renderer, numbers, avg_frame_rate );
 		}
 		
 		SDL_RenderPresent( renderer );

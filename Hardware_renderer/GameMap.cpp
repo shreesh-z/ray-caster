@@ -84,7 +84,8 @@ GameMap::GameMap(SDL_Surface *mapImg, SDL_Texture *wall_textures, SDL_Texture *d
 				
 				//if this block has the player or an agent, set it to an empty block
 				if( ( colors[0] == 0 and colors[1] == 255 and colors[2] == 1 )
-					or( colors[0] == 1 and colors[1] == 0 and colors[2] == 255 ) ){
+					or ( colors[0] == 255 and colors[1] == 255 and colors[2] == 254 )
+					or ( colors[0] == 1 and colors[1] == 0 and colors[2] == 255 ) ){
 					colors[0] = colors[1] = colors[2] = 0;
 				}
 				

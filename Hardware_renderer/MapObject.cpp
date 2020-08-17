@@ -82,14 +82,17 @@ bool MapObject::tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt){
 		if( this == agent_arr[a] )
 			continue;
 		
+		if( std::hypot( this->x - agent_arr[a]->x, this->y - agent_arr[a]->y ) > 2*(this->objDim + agent_arr[a]->objDim) )
+			continue;
+		
 		double axl, axh, ayl, ayh;
 		axl = agent_arr[a]->x - (agent_arr[a]->objDim >> 1);
 		axh = agent_arr[a]->x + (agent_arr[a]->objDim >> 1);
 		ayl = agent_arr[a]->y - (agent_arr[a]->objDim >> 1);
 		ayh = agent_arr[a]->y + (agent_arr[a]->objDim >> 1);
 		
-		for( double i = bxl; i < bxh; i += 1.0 ){
-			for( double j = byl; j < byh; j += 1.0 ){
+		for( double i = bxl; i < bxh; i += 2.0 ){
+			for( double j = byl; j < byh; j += 2.0 ){
 				//if object's's rect is intersecting another object's rect
 				if( axl < i and i < axh  and  ayl < j and j < ayh )
 					return false;
@@ -99,6 +102,8 @@ bool MapObject::tryMove(GameMap *gMap, MapObject **agent_arr, int agent_cnt){
 	
 	return true;
 }
+
+//###########################################PLAYER#############################################
 
 Player::Player(double x_, double y_, double ang_, int objDim_){
 	x = x_; y = y_;
@@ -137,6 +142,8 @@ bool Player::follow_player(GameMap *gmap, MapObject **agent_arr, int agent_cnt, 
 //does nothing
 void Player::sprite3D(GameMap *gMap, SDL_Renderer *renderer, MapObject *player, double spread){}
 
+void Player::double_speed(){}
+
 //##########################################AGENT##############################################################
 
 //main constructor
@@ -154,6 +161,10 @@ Agent::Agent(SDL_Texture *sprite, double posX, double posY, double ang_, int obj
 	
 	//hardcoded to always follow player
 	follow_player_flag = true;
+}
+
+void Agent::double_speed(){
+	speed *=2;
 }
 
 //agents only stops seeing player
@@ -416,8 +427,13 @@ void Agent::sprite2D(SDL_Renderer *renderer, MapObject *player){
 	aRect.w = this->objDim >> 1;
 	aRect.h = this->objDim >> 1;
 	
+	int bounds_xl = (wid >> 1) - 512;
+	int bounds_xh = (wid >> 1) + 512;
+	int bounds_yl = (hig >> 1) - 512;
+	int bounds_yh = (hig >> 1) + 512;
+	
 	//if rectangle out of bounds, dont draw
-	if( aRect.x + aRect.w < 0 or aRect.y + aRect.h < 0 or aRect.x > wid or aRect.y > hig )
+	if( aRect.x + aRect.w < bounds_xl or aRect.y + aRect.h < bounds_yl or aRect.x > bounds_xh or aRect.y > bounds_yh )
 		return;
 	
 	int spriteTextWid;

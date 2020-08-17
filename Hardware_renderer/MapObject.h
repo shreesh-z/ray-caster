@@ -30,6 +30,8 @@
 			
 			//draw 2D sprite on the top-down view screen
 			virtual void sprite2D(SDL_Renderer *renderer, MapObject *player) = 0;
+			
+			virtual void double_speed() = 0;
 	};
 	
 	//special map object: the player
@@ -46,6 +48,8 @@
 			void sprite3D( GameMap *gMap, SDL_Renderer *renderer, MapObject *player, double spread );
 			//does nothing, returns false
 			bool follow_player(GameMap *gmap, MapObject **agent_arr, int agent_cnt, double dt);
+			
+			void double_speed();
 	};
 	
 	//the enemies
@@ -81,6 +85,8 @@
 			void sprite3D(GameMap *gMap, SDL_Renderer *renderer, MapObject *player, double spread);
 			//display agent sprite on the 2D top down view iff agent has seen the player
 			void sprite2D(SDL_Renderer *renderer, MapObject *player);
+			
+			void double_speed();
 	};
 	
 #endif
