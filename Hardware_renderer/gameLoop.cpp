@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <set>
 #include <chrono>
+#include <vector>
 #define PI 3.1415926535897932384
 
 #include "GameMap.h"
@@ -25,7 +26,7 @@ SDL_Window *window = NULL;
 SDL_Renderer* renderer = NULL;
 
 void castRays(GameMap *gMap, MapObject *player, SDL_Renderer *renderer, int angRange, int depth);
-bool input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
+bool input(GameMap *gMap, MapObject *player, std::vector<MapObject*> &agent_arr,
 			std::set<int> keys, double speed, double angVel, double dt);
 bool checkWhiteBlock( GameMap *gMap, MapObject *player );
 
@@ -211,12 +212,12 @@ int main( int argc, char* args[] ){
 		}
 	}
 	
-	MapObject **agent_arr = new MapObject*[agent_cnt];
+	std::vector<MapObject*> agent_arr;
+	agent_arr.push_back( &player );
 	for( int i = 1; i < agent_cnt; i++ ){
-		agent_arr[i] = new Agent( spriteText, 0.0, 0.0, (7*PI)/2, 10, 10, 100.0, 1.5 );
+		agent_arr.push_back( new Agent( spriteText, 0.0, 0.0, (7*PI)/2, 10, 10, 100.0, 1.5, &player ) );
 	}
 	
-	agent_arr[0] = &player;
 	int agent_index = 1;
 	
 	for( int i = 0; i < mapImg->h; i++ ){
@@ -245,17 +246,12 @@ int main( int argc, char* args[] ){
 				agent_index++;
 			
 			}
-				
-			if( agent_index > agent_cnt ){
-				printf("Agent array not initialized\n");
-				SDL_DestroyTexture( wall_textures );
-				SDL_DestroyTexture( dark_wall_textures );
-				SDL_DestroyTexture( spriteText );
-				SDL_FreeSurface( mapImg );
-				close_SDL();
-				return 0;
-			}
+			
+			if( agent_index == (int)agent_arr.size() )
+				break;
 		}
+		if( agent_index == (int)agent_arr.size() )
+			break;
 	}
 	
 	//creating a map object
@@ -475,14 +471,14 @@ int main( int argc, char* args[] ){
 		if( !( game_over or game_won ) ){
 			
 			//get input from keyboard and move player according to it
-			if( input( &gMap, &player, agent_arr, agent_cnt, keys, 240, 1.5, dt ) ){
+			if( input( &gMap, &player, agent_arr, keys, 240, 1.5, dt ) ){
 				game_won = true;
 				break;
 			}
 			
 			//move all the enemies
-			for( int i = 1; i < agent_cnt; i++ ){
-				if( agent_arr[i]->follow_player( &gMap, agent_arr, agent_cnt, dt ) )
+			for( int i = 1; i < (int)agent_arr.size(); i++ ){
+				if( agent_arr[i]->follow_player( &gMap, agent_arr, dt ) )
 					game_over = true;
 			}
 			
@@ -501,8 +497,10 @@ int main( int argc, char* args[] ){
 				castRays( &gMap, &player, renderer, 30, DEPTH_OF_FIELD );
 				
 				//display the enemies on the screen
-				for( int i = 0; i < agent_cnt; i++ )
-					agent_arr[i]->sprite3D( &gMap, renderer, &player, 0.5235987755982988);
+				//for( int i = 1; i < (int)agent_arr.size(); i++ )
+				//	agent_arr[i]->sprite3D( &gMap, renderer, &player, 0.5235987755982988);
+			
+				draw_3D_sprites( renderer, &gMap, &player, agent_arr, 0.5235987755982988 );
 				
 			}else{
 				
@@ -514,9 +512,9 @@ int main( int argc, char* args[] ){
 				gMap.draw2DMap( renderer , player.x, player.y );
 				
 				//draw all the players on the map
-				for( int i = 0; i < agent_cnt; i++ )
-					agent_arr[i]->sprite2D( renderer, &player );
-			}
+				for( int i = 0; i < (int)agent_arr.size(); i++ )
+					agent_arr[i]->sprite2D( renderer );
+				}
 		}else{
 			//if game is over or won, then stop running the game loop
 			running = false;
@@ -537,9 +535,6 @@ int main( int argc, char* args[] ){
 		}
 		
 		SDL_RenderPresent( renderer );
-		
-		//update the window after drawing everything on the screen
-		//SDL_UpdateWindowSurface( window );
 	}
 	
 	SDL_DestroyTexture( pauseScreen );
@@ -616,7 +611,7 @@ bool checkWhiteBlock( GameMap *gMap, MapObject *player ){
 	return false;
 }
 
-bool input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cnt,
+bool input(GameMap *gMap, MapObject *player, std::vector<MapObject*> &agent_arr,
 			std::set<int> keys, double speed, double angVel, double dt){
 	
 	double moveX, moveY, moveAng;
@@ -667,7 +662,7 @@ bool input(GameMap *gMap, MapObject *player, MapObject **agent_arr, int agent_cn
 		}
 	}
 	
-	player->move(gMap, agent_arr, agent_cnt, moveX, moveY, moveAng, true);
+	player->move(gMap, agent_arr, moveX, moveY, moveAng, true);
 	
 	return touched;
 }
