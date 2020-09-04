@@ -4,9 +4,11 @@
 #include <SDL2/SDL.h>
 
 	class Block{
-			
-		public:
 		
+		public:
+			
+			bool seen;
+			
 			SDL_Texture *wall_texture;
 			
 			//Holds the color tuple for the wall colors
@@ -16,9 +18,9 @@
 			bool isWall;
 			
 			virtual void blit_wall_to_screen( SDL_Renderer *renderer, SDL_Rect *dstRect,
-									int offset, int offset_y, bool vert );
+									int offset, int offset_y, bool vert ) = 0;
 									
-			virtual void blit_wall_to_2d_screen( SDL_Renderer *renderer, SDL_Rect *dstRect );
+			virtual void blit_wall_to_2d_screen( SDL_Renderer *renderer, SDL_Rect *dstRect ) = 0;
 	};
 
 	class ColorBlock : public Block{

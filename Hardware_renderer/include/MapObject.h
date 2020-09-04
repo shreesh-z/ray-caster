@@ -72,7 +72,7 @@
 			double diffX_player, diffY_player, diff_hypot;
 			
 			Agent(SDL_Texture *sprite, double posX, double posY, double ang_, int objDim_,
-				int tile_radius_, double speed_, double angVel_, MapObject *player );
+				int tile_radius_, double speed_, double angVel_ );
 			
 			//this is implemented properly
 			bool follow_player(GameMap *gmap, std::vector<MapObject*> &agent_arr, double dt);

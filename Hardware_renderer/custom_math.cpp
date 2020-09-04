@@ -1,4 +1,4 @@
-#include "custom_math.h"
+#include <custom_math.h>
 
 #define PI 3.1415926535897932384
 const unsigned BLOCK_DIM = 64;

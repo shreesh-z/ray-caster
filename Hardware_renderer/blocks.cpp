@@ -1,4 +1,4 @@
-#include "blocks.h"
+#include <blocks.h>
 #include <SDL2/SDL.h>
 
 const unsigned BLOCK_DIM = 64;
@@ -10,34 +10,19 @@ ColorBlock::ColorBlock(Uint8 R_, Uint8 G_, Uint8 B_, bool isWall_, double wallCo
 	colors[1] = G_; dark_colors[1] = (Uint8)(wallColorRatio*G_);
 	colors[2] = B_; dark_colors[2] = (Uint8)(wallColorRatio*B_);
 	
-	//wall_texture = SDL_CreateRGBSurface( 0, 1, BLOCK_DIM, 24, 0, 0, 0, 0 );
 	wall_texture = NULL;
 	
-	//SDL_FillRect( wall_texture, NULL, SDL_MapRGB( wall_texture->format, R_, G_, B_ ) );
-	//wall_texture is now a surface one pixel thick that has the color of the wall
-	//This is done for no reason, just to avoid null pointers and then segfaults
-	
 	isWall = isWall_;
+	
+	seen = false;
 }
 //default block is an empty block
 ColorBlock::ColorBlock(double wallColorRatio) : ColorBlock(0, 0, 0, false, wallColorRatio){}
 
-void Block::blit_wall_to_screen( SDL_Renderer *renderer, SDL_Rect *dstRect,
-							int offset, int offset_y, bool isVert ){
-	
-	//texture offset doesn't matter, just fill the rect with this block's color
-	SDL_SetRenderDrawColor( renderer, colors[0], colors[1], colors[2], 255 );
-	SDL_RenderFillRect( renderer, dstRect );
-}
-
-void Block::blit_wall_to_2d_screen( SDL_Renderer *renderer, SDL_Rect *dstRect ){
-	//directly fill with the block color
-	SDL_SetRenderDrawColor( renderer, colors[0], colors[1], colors[2], 255 );
-	SDL_RenderFillRect( renderer, dstRect );
-}
-
 void ColorBlock::blit_wall_to_screen( SDL_Renderer *renderer, SDL_Rect *dstRect,
 								int offset, int offset_y, bool isVert ){
+	
+	seen = true;
 	
 	//texture offset doesn't matter, just fill the rect with this block's color
 	if( isVert )
@@ -50,9 +35,11 @@ void ColorBlock::blit_wall_to_screen( SDL_Renderer *renderer, SDL_Rect *dstRect,
 }
 
 void ColorBlock::blit_wall_to_2d_screen( SDL_Renderer *renderer, SDL_Rect *dstRect ){
-	//directly fill with the block color
-	SDL_SetRenderDrawColor( renderer, colors[0], colors[1], colors[2], 255 );
-	SDL_RenderFillRect( renderer, dstRect );
+	if( seen ){	
+		//directly fill with the block color
+		SDL_SetRenderDrawColor( renderer, colors[0], colors[1], colors[2], 255 );
+		SDL_RenderFillRect( renderer, dstRect );
+	}
 }
 
 TextureBlock::TextureBlock( SDL_Texture *wall_textures, SDL_Texture *dark_wall_textures,
@@ -67,10 +54,14 @@ TextureBlock::TextureBlock( SDL_Texture *wall_textures, SDL_Texture *dark_wall_t
 	
 	//textured blocks are always solid
 	isWall = true;
+	
+	seen = false;
 }
 
 void TextureBlock::blit_wall_to_screen( SDL_Renderer *renderer, SDL_Rect *dstRect,
 									int offset, int offset_y, bool isVert ){
+	
+	seen = true;
 	
 	SDL_Rect srcRect;
 	
@@ -88,6 +79,9 @@ void TextureBlock::blit_wall_to_screen( SDL_Renderer *renderer, SDL_Rect *dstRec
 }
 
 void TextureBlock::blit_wall_to_2d_screen( SDL_Renderer *renderer, SDL_Rect *dstRect ){
+	
+	if( !seen ) return;
+	
 	SDL_Rect srcRect;
 	srcRect.x = texture_offset; srcRect.y = 0;
 	srcRect.w = BLOCK_DIM; srcRect.h = BLOCK_DIM;

@@ -5,7 +5,7 @@
 
 //Refer to this header file for documentation
 //since header file already includes SDL, no need to include again
-#include "GameMap.h"
+#include <GameMap.h>
 
 //creates the game map by importing a bitmap file
 //uses SDL's internal mechanisms to read the bitmap file and create the map array

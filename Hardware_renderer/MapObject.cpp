@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <cmath>
-#include "MapObject.h"
+#include <MapObject.h>
 
 #define PI 3.1415926535897932384
 
@@ -148,7 +148,7 @@ void Player::double_speed(){}
 
 //main constructor
 Agent::Agent(SDL_Texture *sprite, double posX, double posY, double ang_, int objDim_,
-			int tile_radius_, double speed_, double angVel_, MapObject *player){
+			int tile_radius_, double speed_, double angVel_){
 	spriteText = sprite;
 	objDim = objDim_;
 	x = posX; y = posY; ang = ang_;
@@ -363,6 +363,8 @@ void draw_3D_sprites( SDL_Renderer *renderer, GameMap *gMap, MapObject *player, 
 	int wid, hig;
 	SDL_GetRendererOutputSize( renderer, &wid, &hig );
 	
+	double screenDist = (double)wid/( 2*std::tan(spread) );
+	
 	while( !dist_queue.empty() ){
 		
 		//extract agent from the queue
@@ -397,11 +399,10 @@ void draw_3D_sprites( SDL_Renderer *renderer, GameMap *gMap, MapObject *player, 
 			int SPRITE = (int)( ( VIEW_ANGLE*4 )/PI );
 			
 			//horiz position on screen at which sprite is centered
-			//-(ang_diff/spread) because larger angles are placed nearer to the left on the screen
-			double pos = (double)(wid >> 1)*( 1.0 - ang_diff/spread ); 
-			
+			double pos = (wid >> 1) + std::tan( mod2PI( -ang_diff ) )*
+						( (double)(wid)/( 2*std::tan(spread) ) ); //this is the distance of screen from player (screenDist)
 			//distance away from the screen
-			double screenDist = (double)wid/( 2*std::tan(spread) );
+					//double screenDist = (double)(wid)/( 2*std::tan(spread) );
 			
 			//dimensions of the sprite
 			int sprite_wid = (int)(spriteTextWid*screenDist/agent->diff_hypot);
@@ -447,6 +448,7 @@ void draw_3D_sprites( SDL_Renderer *renderer, GameMap *gMap, MapObject *player, 
 					
 					SDL_Rect dstRect;
 					dstRect.x = (int)pos - (sprite_wid >> 1) + i;
+					//dstRect.x = (wid >> 1) + std::tan( mod2PI( player->ang - rAng ) )*screenDist;
 					dstRect.y = (hig - sprite_hig) >> 1;
 					dstRect.h = sprite_hig;
 					dstRect.w = 1;
